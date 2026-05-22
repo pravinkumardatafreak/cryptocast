@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Data files (large - users should provide their own)
+data/Bitcoin Historical Data.csv
+scaled_data.npy
+scalers.pkl
+
+# Model artifacts (regenerable)
+results/*.json
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Misc
+*.log
+.env
