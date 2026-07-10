@@ -282,8 +282,8 @@ for epoch in range(1, EPOCHS + 1):
         preds = model(batch_x)
         loss = criterion(preds, batch_y)
         loss.backward()
-torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-optimizer.step()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        optimizer.step()
         tr_loss_accum += loss.item() * len(batch_x)
     
     epoch_tr_loss = tr_loss_accum / len(X_tr_t)

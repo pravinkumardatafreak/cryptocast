@@ -171,13 +171,13 @@ data_temp['Year'] = data_temp.index.year
 data_temp['Month'] = data_temp.index.month
 fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 yearly_data = [data_temp[data_temp['Year'] == y]['Price'].values for y in sorted(data_temp['Year'].unique())]
-bp1 = axes[0].boxplot(yearly_data, labels=sorted(data_temp['Year'].unique()), patch_artist=True)
+bp1 = axes[0].boxplot(yearly_data, tick_labels=sorted(data_temp['Year'].unique()), patch_artist=True)
 for patch in bp1['boxes']: patch.set_facecolor('#aed6f1')
 axes[0].set_title('Bitcoin Price by Year', fontsize=14, fontweight='bold')
 axes[0].set_xlabel('Year', fontsize=12); axes[0].set_ylabel('Price (USD)', fontsize=12)
 axes[0].tick_params(axis='x', rotation=45)
 monthly_data = [data_temp[data_temp['Month'] == m]['Price'].values for m in range(1, 13)]
-bp2 = axes[1].boxplot(monthly_data, labels=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], patch_artist=True)
+bp2 = axes[1].boxplot(monthly_data, tick_labels=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], patch_artist=True)
 for patch in bp2['boxes']: patch.set_facecolor('#a9dfbf')
 axes[1].set_title('Bitcoin Price by Month', fontsize=14, fontweight='bold')
 axes[1].set_xlabel('Month', fontsize=12); axes[1].set_ylabel('Price (USD)', fontsize=12)
@@ -215,15 +215,25 @@ plt.close()
 print("  [8/8] Rolling statistics")
 
 # ── 3. Preprocessing ─────────────────────────────────────────
-print("\n[Step 1] Preprocessing data...")
+print("\n[Step 1] Preprocessing data (leak-free & restricted features)...")
 
-features = ['Price', 'Open', 'High', 'Low', 'Vol.']
+# Features restricted to mandatory Close (Price) and Open price
+features = ['Price', 'Open']
 target_col = 'Price'
 
+# Determine the chronological split index to avoid data leakage
+split_idx = int(len(data) * (1 - TEST_RATIO))
+print(f"  Training features split index: {split_idx} / {len(data)} samples")
+
+# Fit the scalers strictly on the training partition
 scaler = MinMaxScaler()
-scaled_data = scaler.fit_transform(data[features])
+scaler.fit(data[features].iloc[:split_idx])
+
 target_scaler = MinMaxScaler()
-target_scaler.fit(data[[target_col]])
+target_scaler.fit(data[[target_col]].iloc[:split_idx])
+
+# Transform the entire dataset using the train-fitted scalers
+scaled_data = scaler.transform(data[features])
 
 np.save(os.path.join(OUTPUT_DIR, 'scaled_data.npy'), scaled_data)
 with open(os.path.join(OUTPUT_DIR, 'scalers.pkl'), 'wb') as f:
@@ -234,7 +244,7 @@ meta = {
     'horizons': HORIZONS,
     'horizon_names': HORIZON_NAMES,
     'test_ratio': TEST_RATIO,
-    'data_shape': list(data.shape),
+    'data_shape': list(data[features].shape),
     'date_range': [str(data.index.min()), str(data.index.max())],
     'data_source': 'Bitcoin Historical Data CSV',
     'num_samples': len(data)
@@ -247,4 +257,5 @@ for horizon, name in zip(HORIZONS, HORIZON_NAMES):
     split = int(n_sequences * (1 - TEST_RATIO))
     print(f"  {name}: {n_sequences} sequences, train={split}, test={n_sequences - split}")
 
-print("\n[Step 1] Complete! Data ready for model training.")
+print("\n[Step 1] Complete! Leak-free data ready for model training.")
+
