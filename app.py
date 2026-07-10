@@ -200,6 +200,16 @@ def load_results():
 df_raw     = load_data()
 df_results = load_results()
 
+@st.cache_data(ttl=0)
+def load_wfv_results():
+    wfv_path = os.path.join(PROJECT_DIR, "wfv_results.json")
+    if os.path.exists(wfv_path):
+        with open(wfv_path, "r") as f:
+            return json.load(f)
+    return None
+
+df_wfv = load_wfv_results()
+
 # -- Sidebar -------------------------------------------------------------------
 with st.sidebar:
     st.markdown("### CryptoCast")
@@ -228,6 +238,7 @@ tabs = st.tabs([
     "Exploratory Analysis",
     "Seasonality Analysis",
     "Model Performance",
+    "Backtest (WFV)",
     "Diagnostics",
     "Macro & Halving Dynamics",
 ])
@@ -546,9 +557,110 @@ with tabs[3]:
         st.warning("model_comparison_results.csv not found. Run `python cryptocast.py` first.")
 
 # =============================================================================
-# Tab 5: Diagnostics
+# Tab 5: Backtest (WFV)
 # =============================================================================
 with tabs[4]:
+    st.markdown('<div class="cc-section-title">Walk-Forward Validation (Backtesting)</div>', unsafe_allow_html=True)
+    st.write(
+        "Time-series models are highly sensitive to market regimes. Evaluating a model "
+        "on a single test period can be misleading. Walk-Forward Validation (expanding window) "
+        "evaluates model performance across multiple historical phases."
+    )
+    
+    callout(
+        "3-Fold Expanding Window Setup",
+        "<ul>"
+        "<li><b>Fold 1:</b> Train on 2010-2018 -> Test on 2019-2020 (Consolidation phase)</li>"
+        "<li><b>Fold 2:</b> Train on 2010-2020 -> Test on 2020-2022 (Bull run & crash)</li>"
+        "<li><b>Fold 3:</b> Train on 2010-2022 -> Test on 2022-2024 (Bear market & recovery)</li>"
+        "</ul>"
+    )
+    
+    if df_wfv is not None:
+        col_w1, col_w2 = st.columns(2)
+        selected_model = col_w1.selectbox("Select Model for WFV Analysis", ["RNN", "1D-CNN", "LSTM", "Transformer"])
+        selected_horizon = col_w2.selectbox("Select Horizon for WFV Analysis", ["1D", "3D", "7D"])
+        
+        # Display table for chosen combination across folds
+        fold_data = []
+        for f_idx in range(3):
+            metrics = df_wfv[selected_model][f_idx][selected_horizon]
+            fold_data.append({
+                "Fold": f"Fold {f_idx + 1}",
+                "MAE (USD)": f"${metrics['MAE']:,.2f}",
+                "RMSE (USD)": f"${metrics['RMSE']:,.2f}",
+                "MAPE (%)": f"{metrics['MAPE']:.2f}%",
+                "raw_mape": metrics['MAPE']
+            })
+            
+        # Calculate Average
+        avg_mae = np.mean([df_wfv[selected_model][f_idx][selected_horizon]['MAE'] for f_idx in range(3)])
+        avg_rmse = np.mean([df_wfv[selected_model][f_idx][selected_horizon]['RMSE'] for f_idx in range(3)])
+        avg_mape = np.mean([df_wfv[selected_model][f_idx][selected_horizon]['MAPE'] for f_idx in range(3)])
+        
+        fold_data.append({
+            "Fold": "Average",
+            "MAE (USD)": f"${avg_mae:,.2f}",
+            "RMSE (USD)": f"${avg_rmse:,.2f}",
+            "MAPE (%)": f"{avg_mape:.2f}%",
+            "raw_mape": avg_mape
+        })
+        
+        df_fold_table = pd.DataFrame(fold_data)
+        st.markdown(f"**Performance of {selected_model} on {selected_horizon} Horizon Across Folds**")
+        st.dataframe(df_fold_table.drop(columns=["raw_mape"]), use_container_width=True, hide_index=True)
+        
+        # Plot Plotly bar chart comparing folds
+        fig_wfv = go.Figure()
+        fig_wfv.add_trace(go.Bar(
+            x=[d["Fold"] for d in fold_data[:-1]],
+            y=[d["raw_mape"] for d in fold_data[:-1]],
+            marker_color=["#4ade80", "#38bdf8", "#fb923c"],
+            hovertemplate="<b>%{x}</b><br>MAPE: %{y:.2f}%<extra></extra>"
+        ))
+        fig_wfv.add_hline(y=avg_mape, line_dash="dash", line_color="#f87171",
+                          annotation_text=f"Average: {avg_mape:.2f}%", annotation_font_color="#f87171")
+        fig_wfv.update_layout(
+            **DARK_LAYOUT,
+            title=f"Walk-Forward MAPE (%) Comparison for {selected_model} ({selected_horizon})",
+            yaxis_title="MAPE (%)",
+            height=350,
+            showlegend=False
+        )
+        st.plotly_chart(fig_wfv, use_container_width=True)
+        
+        # Compare all models' average MAPEs across all folds
+        st.markdown('<div class="cc-section-title">Model Stability Comparison (Average MAPE across Folds)</div>', unsafe_allow_html=True)
+        comparison_rows = []
+        for mdl in ["RNN", "1D-CNN", "LSTM", "Transformer"]:
+            for hz in ["1D", "3D", "7D"]:
+                mapes = [df_wfv[mdl][f_idx][hz]['MAPE'] for f_idx in range(3)]
+                comparison_rows.append({
+                    "Model": mdl,
+                    "Horizon": hz,
+                    "Avg WFV MAPE (%)": np.mean(mapes)
+                })
+        df_comp = pd.DataFrame(comparison_rows)
+        fig_comp = px.bar(
+            df_comp, x="Model", y="Avg WFV MAPE (%)", color="Horizon", barmode="group",
+            color_discrete_map={"1D": "#4ade80", "3D": "#38bdf8", "7D": "#fb923c"}
+        )
+        fig_comp.update_layout(
+            **DARK_LAYOUT,
+            title="Stability Comparison: Average WFV MAPE (%) by Model and Horizon",
+            yaxis_title="Average WFV MAPE (%)",
+            height=400,
+            legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#c9d1d9"))
+        )
+        st.plotly_chart(fig_comp, use_container_width=True)
+        
+    else:
+        st.info("Walk-Forward Validation metrics not found or still generating in background. Refresh dashboard once completed.")
+
+# =============================================================================
+# Tab 6: Diagnostics
+# =============================================================================
+with tabs[5]:
     d1, d2 = st.columns(2)
     horz = d1.selectbox("Horizon", ["1D", "3D", "7D"])
     mdl  = d2.selectbox("Model",   ["1D-CNN", "RNN", "LSTM", "Transformer"])
@@ -616,9 +728,9 @@ with tabs[4]:
                 st.image(p, caption=f"Actual vs Predicted - {horz}", use_container_width=True)
 
 # =============================================================================
-# Tab 6: Macro & Halving Dynamics
+# Tab 7: Macro & Halving Dynamics
 # =============================================================================
-with tabs[5]:
+with tabs[6]:
     st.markdown('<div class="cc-section-title">Macroeconomic Dynamics &amp; Asset Rotation</div>',
                 unsafe_allow_html=True)
     st.write(

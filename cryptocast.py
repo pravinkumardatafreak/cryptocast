@@ -34,10 +34,22 @@ print("\n" + "=" * 70)
 # Step 3: Visualization Generation
 print("\n>>> Launching Step 3: Visual Comparison & Evaluation Charts...")
 from src.step3_viz import *  # noqa: F401 F403
+print("\n" + "=" * 70)
+
+# Step 4: Walk-Forward Validation (Backtesting)
+print("\n>>> Launching Step 4: Walk-Forward Validation (Backtesting)...")
+import subprocess
+wfv_script = os.path.join(PROJECT_DIR, 'src', 'step4_wfv.py')
+result = subprocess.run([sys.executable, wfv_script])
+if result.returncode != 0:
+    print("  [ERROR] Walk-Forward Validation failed!")
+else:
+    print("  [SUCCESS] WFV Backtesting complete!")
 
 print("\n" + "=" * 70)
 print("CryptoCast - PyTorch Pipeline Complete!")
 print("=" * 70)
 print(f"Visualizations: {os.path.join(PROJECT_DIR, 'visualizations')}")
 print(f"Results Compiled: {os.path.join(PROJECT_DIR, 'model_comparison_results.csv')}")
-print(f"Report: {os.path.join(PROJECT_DIR, 'CryptoCast_Project_Report.pdf')}")
+print(f"WFV Backtest: {os.path.join(PROJECT_DIR, 'wfv_results.json')}")
+
