@@ -1,7 +1,8 @@
 """
-CryptoCast - Step 2: Train all 12 models in PyTorch (4 models x 3 horizons)
-==========================================================================
-Trains PyTorch-based 1D-CNN, RNN, LSTM, and Transformer models for 1D, 3D, and 7D horizons.
+CryptoCast - Step 2: Train 4 PyTorch models with multi-output heads
+=======================================================================
+Trains 1D-CNN, RNN, LSTM, and Transformer models, each outputting log-return
+predictions for 1D, 3D, and 7D horizons simultaneously in a single forward pass.
 Compiles all metrics into CSV and JSON summary deliverables.
 
 Usage:
@@ -12,7 +13,6 @@ import sys
 import json
 import subprocess
 import pandas as pd
-import numpy as np
 
 # ── Configuration ─────────────────────────────────────────────
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -29,32 +29,31 @@ print("==============================================================")
 
 all_results = {h: {} for h in HORIZON_NAMES}
 
-for horizon_name in HORIZON_NAMES:
-    print(f"\n--- Horizon: {horizon_name} ---")
-    for model_name in MODELS:
-        print(f"  Launching training for {model_name}...")
+# Build path to the trainer script
+trainer_script = os.path.join(PROJECT_DIR, 'src', 'train_model_pytorch.py')
+
+for model_name in MODELS:
+    print(f"\n--- Training Model: {model_name} ---")
+    
+    # Execute the trainer in a subprocess for isolated memory and clean logs
+    cmd = [sys.executable, trainer_script, model_name]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    
+    if result.returncode != 0:
+        print(f"  [ERROR] Training failed for {model_name}!")
+        print(result.stderr)
+        continue
         
-        # Build path to the trainer script
-        trainer_script = os.path.join(PROJECT_DIR, 'src', 'train_model_pytorch.py')
-        
-        # Execute the trainer in a subprocess for isolated memory and clean logs
-        cmd = [sys.executable, trainer_script, model_name, horizon_name]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        
-        if result.returncode != 0:
-            print(f"  [ERROR] Training failed for {model_name} ({horizon_name})!")
-            print(result.stderr)
-            continue
+    # Parse output for a quick console feedback
+    stdout = result.stdout
+    metric_lines = []
+    for line in stdout.split('\n'):
+        if "PyTorch Results" in line:
+            metric_lines.append(line.strip())
             
-        # Parse output for a quick console feedback
-        stdout = result.stdout
-        metric_line = ""
-        for line in stdout.split('\n'):
-            if "PyTorch Results:" in line:
-                metric_line = line.strip()
-                break
-        
-        print(f"  [SUCCESS] {model_name} training complete! {metric_line}")
+    print(f"  [SUCCESS] {model_name} training complete!")
+    for ml in metric_lines:
+        print(f"    {ml}")
 
 # ── Compiling Results ─────────────────────────────────────────
 print("\n" + "=" * 70)

@@ -215,10 +215,33 @@ plt.close()
 print("  [8/8] Rolling statistics")
 
 # ── 3. Preprocessing ─────────────────────────────────────────
-print("\n[Step 1] Preprocessing data (leak-free & restricted features)...")
+print("\n[Step 1] Preprocessing data (leak-free & expanded features)...")
 
-# Features restricted to mandatory Close (Price) and Open price
-features = ['Price', 'Open']
+# Technical Indicators
+# 1. Simple Moving Averages (SMAs)
+data['SMA_7'] = data['Price'].rolling(window=7).mean()
+data['SMA_30'] = data['Price'].rolling(window=30).mean()
+
+# 2. Relative Strength Index (RSI)
+delta = data['Price'].diff()
+gain = delta.clip(lower=0)
+loss = -delta.clip(upper=0)
+avg_gain = gain.rolling(window=14).mean()
+avg_loss = loss.rolling(window=14).mean()
+rs = avg_gain / (avg_loss + 1e-9)
+data['RSI_14'] = 100 - (100 / (1 + rs))
+
+# 3. Rolling Volatility (30-day standard deviation of percent change)
+data['Vol_30'] = data['Change %'].rolling(window=30).std()
+
+# Drop rows with NaNs from rolling calculations
+data = data.dropna()
+
+# Save cleaned data with technical indicators
+data.to_csv(csv_path)
+
+# Features expanded to include technical indicators and price-volume features
+features = ['Price', 'Open', 'High', 'Low', 'Vol.', 'Change %', 'SMA_7', 'SMA_30', 'RSI_14', 'Vol_30']
 target_col = 'Price'
 
 # Determine the chronological split index to avoid data leakage

@@ -12,13 +12,13 @@
   ],
   "test_ratio": 0.2,
   "data_shape": [
-    4993,
-    2
+    4964,
+    10
   ],
   "date_range": [
-    "2010-07-18 00:00:00",
+    "2010-08-16 00:00:00",
     "2024-03-24 00:00:00"
   ],
   "data_source": "Bitcoin Historical Data CSV",
-  "num_samples": 4993
+  "num_samples": 4964
 }

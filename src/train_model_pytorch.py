@@ -1,12 +1,13 @@
 """
-CryptoCast - Train a single model for a single horizon using PyTorch
+CryptoCast - Train a multi-output model for all horizons using PyTorch
 ===================================================================
 A clean, modular, and PEP-8 compliant PyTorch script that implements
-1D-CNN, RNN, LSTM, and Transformer architectures for multi-horizon forecasting.
+1D-CNN, RNN, LSTM, and Transformer architectures to forecast 1D, 3D, 
+and 7D horizons simultaneously using stationary log returns.
 
 Usage:
-    python src/train_model_pytorch.py <model_name> <horizon_name>
-    E.g.:  python src/train_model_pytorch.py 1D-CNN 1D
+    python src/train_model_pytorch.py <model_name>
+    E.g.:  python src/train_model_pytorch.py LSTM
 """
 import os
 import sys
@@ -14,6 +15,7 @@ import json
 import pickle
 import warnings
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -40,56 +42,75 @@ BATCH_SIZE = 64
 SEQ_LENGTH = 60
 
 # Check command line arguments
-if len(sys.argv) < 3:
-    print("Error: Please provide model_name and horizon_name.")
-    print("Usage: python src/train_model_pytorch.py <model_name> <horizon_name>")
+if len(sys.argv) < 2:
+    print("Error: Please provide model_name.")
+    print("Usage: python src/train_model_pytorch.py <model_name>")
     sys.exit(1)
 
 model_name = sys.argv[1]
-horizon_name = sys.argv[2]
-
-horizon_map = {'1D': 1, '3D': 3, '7D': 7}
-if horizon_name not in horizon_map:
-    print(f"Error: Invalid horizon {horizon_name}. Choose from 1D, 3D, 7D.")
-    sys.exit(1)
-horizon = horizon_map[horizon_name]
 
 # ==========================================
 # 1. DATA LOADING & SEQUENCING
 # ==========================================
-print(f"Loading data in PyTorch for {model_name} ({horizon_name})...")
+print(f"Loading data in PyTorch for multi-output {model_name}...")
 scaled_data = np.load(os.path.join(PROJECT_DIR, 'scaled_data.npy'))
+data_df = pd.read_csv(os.path.join(PROJECT_DIR, 'data', 'btc_data.csv'))
+raw_prices = data_df['Price'].values
 
 with open(os.path.join(PROJECT_DIR, 'scalers.pkl'), 'rb') as f:
     scalers = pickle.load(f)
-target_scaler = scalers['target_scaler']
+scaler = scalers['scaler']
 
 with open(os.path.join(PROJECT_DIR, 'meta.json'), 'r') as f:
     meta = json.load(f)
 TEST_RATIO = meta['test_ratio']
 
-def create_sequences(data_array, seq_length, horizon, target_idx=0):
+def create_sequences_multi(scaled_features, raw_prices, seq_length=60):
     """
-    Generate sliding window input sequences and matching target values.
+    Generate sliding window input sequences and matching multi-horizon target log returns.
+    Targets represent:
+      - y_1D = ln(Price_{t+1} / Price_t)
+      - y_3D = ln(Price_{t+3} / Price_t)
+      - y_7D = ln(Price_{t+7} / Price_t)
     """
-    X, y = [], []
-    for i in range(len(data_array) - seq_length - horizon + 1):
-        X.append(data_array[i:i + seq_length])
-        y.append(data_array[i + seq_length + horizon - 1, target_idx])
-    return np.array(X, dtype=np.float32), np.array(y, dtype=np.float32)
+    X, y, anchors, actuals = [], [], [], []
+    # Maximum lookahead is 7 days, so we loop up to len - seq_length - 7 + 1
+    for i in range(len(scaled_features) - seq_length - 7 + 1):
+        X.append(scaled_features[i : i + seq_length])
+        
+        anchor_p = raw_prices[i + seq_length - 1]
+        anchors.append(anchor_p)
+        
+        p_1d = raw_prices[i + seq_length]      # t+1
+        p_3d = raw_prices[i + seq_length + 2]  # t+3
+        p_7d = raw_prices[i + seq_length + 6]  # t+7
+        
+        r_1d = np.log(p_1d / anchor_p)
+        r_3d = np.log(p_3d / anchor_p)
+        r_7d = np.log(p_7d / anchor_p)
+        
+        y.append([r_1d, r_3d, r_7d])
+        actuals.append([p_1d, p_3d, p_7d])
+        
+    return (np.array(X, dtype=np.float32), 
+            np.array(y, dtype=np.float32), 
+            np.array(anchors, dtype=np.float32), 
+            np.array(actuals, dtype=np.float32))
 
 # Create sequences
-X, y = create_sequences(scaled_data, SEQ_LENGTH, horizon, target_idx=0)
+X, y, anchors, actuals = create_sequences_multi(scaled_data, raw_prices, SEQ_LENGTH)
 split_seq = int(len(X) * (1 - TEST_RATIO))
 
 X_train, X_test = X[:split_seq], X[split_seq:]
 y_train, y_test = y[:split_seq], y[split_seq:]
+anchors_train, anchors_test = anchors[:split_seq], anchors[split_seq:]
+actuals_train, actuals_test = actuals[:split_seq], actuals[split_seq:]
 
 # Convert to PyTorch Tensors
 X_train_t = torch.tensor(X_train)
-y_train_t = torch.tensor(y_train).unsqueeze(-1)  # Shape (batch, 1)
+y_train_t = torch.tensor(y_train)  # Shape: (batch, 3)
 X_test_t = torch.tensor(X_test)
-y_test_t = torch.tensor(y_test).unsqueeze(-1)
+y_test_t = torch.tensor(y_test)
 
 # Chronological validation split (15% of training data)
 val_split_idx = int(len(X_train_t) * 0.85)
@@ -100,35 +121,31 @@ y_tr_t, y_val_t = y_train_t[:val_split_idx], y_train_t[val_split_idx:]
 train_loader = DataLoader(TensorDataset(X_tr_t, y_tr_t), batch_size=BATCH_SIZE, shuffle=False)
 val_loader = DataLoader(TensorDataset(X_val_t, y_val_t), batch_size=BATCH_SIZE, shuffle=False)
 
-input_shape = (X_train.shape[1], X_train.shape[2])  # (60, features)
-input_dim = input_shape[1]
+input_dim = X_train.shape[2]  # Should be 10 features now
 
 # ==========================================
-# 2. PYTORCH MODEL ARCHITECTURES
+# 2. PYTORCH MODEL ARCHITECTURES (MULTI-OUTPUT)
 # ==========================================
 
 class CNN1D(nn.Module):
     """
     1D Convolutional Neural Network for local pattern extraction with causal padding.
+    Outputs predictions for 1D, 3D, and 7D horizons simultaneously.
     """
     def __init__(self, input_dim):
         super().__init__()
-        # Causal padding is achieved by padding on left by (kernel_size - 1) and cropping the right
         self.conv1 = nn.Conv1d(in_channels=input_dim, out_channels=64, kernel_size=3, padding=2)
         self.conv2 = nn.Conv1d(64, 64, 3, padding=2)
         self.conv3 = nn.Conv1d(64, 32, 3, padding=2)
         self.pool = nn.AdaptiveAvgPool1d(1)  # Global Average Pooling
         
         self.fc1 = nn.Linear(32, 64)
-        self.fc2 = nn.Linear(64, 1)
+        self.fc2 = nn.Linear(64, 3)  # Multi-output output layer
         self.dropout = nn.Dropout(0.2)
         self.relu = nn.ReLU()
 
     def forward(self, x):
-        # Input shape: (batch, seq_len, features) -> PyTorch expects (batch, features, seq_len)
-        x = x.transpose(1, 2)
-        
-        # Causal convolutions: pad by 2 on both sides, then slice out the last 2 (right-side padding)
+        x = x.transpose(1, 2)  # (batch, features, seq_len)
         x = self.relu(self.conv1(x))[:, :, :-2]
         x = self.relu(self.conv2(x))[:, :, :-2]
         x = self.relu(self.conv3(x))[:, :, :-2]
@@ -151,14 +168,14 @@ class RNNModel(nn.Module):
         self.rnn2 = nn.RNN(64, 32, num_layers=1, batch_first=True)
         self.dropout2 = nn.Dropout(0.2)
         self.fc1 = nn.Linear(32, 32)
-        self.fc2 = nn.Linear(32, 1)
+        self.fc2 = nn.Linear(32, 3)  # Multi-output output layer
         self.relu = nn.ReLU()
 
     def forward(self, x):
         out, _ = self.rnn1(x)
         out = self.dropout1(out)
         out, _ = self.rnn2(out)
-        out = out[:, -1, :]  # Select last time step (return_sequences=False)
+        out = out[:, -1, :]  # Select last time step
         out = self.dropout2(out)
         out = self.relu(self.fc1(out))
         return self.fc2(out)
@@ -177,7 +194,7 @@ class LSTMModel(nn.Module):
         self.lstm3 = nn.LSTM(64, 32, batch_first=True)
         self.dropout3 = nn.Dropout(0.2)
         self.fc1 = nn.Linear(32, 64)
-        self.fc2 = nn.Linear(64, 1)
+        self.fc2 = nn.Linear(64, 3)  # Multi-output output layer
         self.relu = nn.ReLU()
 
     def forward(self, x):
@@ -215,7 +232,7 @@ class TransformerModel(nn.Module):
         self.dropout1 = nn.Dropout(0.2)
         self.fc1 = nn.Linear(self.d_model, 64)
         self.dropout2 = nn.Dropout(0.2)
-        self.fc2 = nn.Linear(64, 1)
+        self.fc2 = nn.Linear(64, 3)  # Multi-output output layer
         self.relu = nn.ReLU()
 
     def forward(self, x):
@@ -247,30 +264,27 @@ else:
     raise ValueError(f"Unknown model architecture: {model_name}")
 
 # Criterion and Optimizer
-# Use a lower learning rate for complex models (LSTM, Transformer) that are
-# more sensitive to large gradient steps due to their depth and gating mechanisms.
 lr_map = {'1D-CNN': 0.001, 'RNN': 0.001, 'LSTM': 0.0005, 'Transformer': 0.0005}
 learning_rate = lr_map[model_name]
 
 criterion = nn.MSELoss()
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
-# Learning Rate Scheduler (analogous to Keras ReduceLROnPlateau)
+# Learning Rate Scheduler
 scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=4, min_lr=1e-7)
 
-# Track losses for history visualization
+# Track losses
 history = {
     'loss': [],
     'val_loss': []
 }
 
-# Early Stopping simulation variables
 best_val_loss = float('inf')
 best_model_weights = None
 patience = 8
 patience_counter = 0
 
-print(f"Training {model_name} for {horizon_name} horizon using PyTorch...")
+print(f"Training multi-output {model_name} using PyTorch...")
 print(f"  Train samples={len(X_tr_t)}, Validation samples={len(X_val_t)}, Test samples={len(X_test_t)}")
 
 for epoch in range(1, EPOCHS + 1):
@@ -299,17 +313,14 @@ for epoch in range(1, EPOCHS + 1):
     
     epoch_val_loss = val_loss_accum / len(X_val_t)
     
-    # Update scheduler
     scheduler.step(epoch_val_loss)
     
     history['loss'].append(epoch_tr_loss)
     history['val_loss'].append(epoch_val_loss)
     
-    # Log progress occasionally or at first/last epoch
     if epoch % 5 == 0 or epoch == 1:
         print(f"  Epoch {epoch:2d}/{EPOCHS}: loss={epoch_tr_loss:.6f} - val_loss={epoch_val_loss:.6f}")
         
-    # Check for early stopping
     if epoch_val_loss < best_val_loss:
         best_val_loss = epoch_val_loss
         best_model_weights = model.state_dict().copy()
@@ -325,37 +336,51 @@ if best_model_weights is not None:
     model.load_state_dict(best_model_weights)
 
 # ==========================================
-# 4. EVALUATION
+# 4. EVALUATION & PRICE RECONSTRUCTION
 # ==========================================
 model.eval()
 with torch.no_grad():
-    y_pred_scaled = model(X_test_t).numpy().flatten()
+    y_pred_returns = model(X_test_t).numpy()  # Shape: (N_test, 3)
 
-# Rescale predictions and targets to original price range (USD)
-y_test_orig = target_scaler.inverse_transform(y_test.reshape(-1, 1)).flatten()
-y_pred_orig = target_scaler.inverse_transform(y_pred_scaled.reshape(-1, 1)).flatten()
+# y_test has shape (N_test, 3) with columns: 1D return, 3D return, 7D return
+# actuals_test has shape (N_test, 3) with columns: 1D Price, 3D Price, 7D Price
+# anchors_test has shape (N_test,) with the raw anchor price P_t
 
-# Compute metrics
-mae = mean_absolute_error(y_test_orig, y_pred_orig)
-rmse = np.sqrt(mean_squared_error(y_test_orig, y_pred_orig))
-mape = mean_absolute_percentage_error(y_test_orig, y_pred_orig) * 100
+# Reconstruct predicted prices: P_t+h = P_t * exp(r_h)
+pred_prices = np.zeros_like(actuals_test)
+pred_prices[:, 0] = anchors_test * np.exp(y_pred_returns[:, 0])  # 1D price forecast
+pred_prices[:, 1] = anchors_test * np.exp(y_pred_returns[:, 1])  # 3D price forecast
+pred_prices[:, 2] = anchors_test * np.exp(y_pred_returns[:, 2])  # 7D price forecast
 
-print(f"\n  PyTorch Results: MAE={mae:.2f}, RMSE={rmse:.2f}, MAPE={mape:.2f}%")
+# Save separate files for each horizon to remain backward-compatible
+horizons = ['1D', '3D', '7D']
+horizon_indices = {'1D': 0, '3D': 1, '7D': 2}
 
-# Save results exactly formatted as original JSON schema
-result = {
-    'model': model_name,
-    'horizon': horizon_name,
-    'MAE': float(mae),
-    'RMSE': float(rmse),
-    'MAPE': float(mape),
-    'history': history,
-    'y_test': y_test_orig.tolist(),
-    'y_pred': y_pred_orig.tolist()
-}
+for h_name in horizons:
+    h_idx = horizon_indices[h_name]
+    y_test_orig_h = actuals_test[:, h_idx]
+    y_pred_orig_h = pred_prices[:, h_idx]
+    
+    mae = mean_absolute_error(y_test_orig_h, y_pred_orig_h)
+    rmse = np.sqrt(mean_squared_error(y_test_orig_h, y_pred_orig_h))
+    mape = mean_absolute_percentage_error(y_test_orig_h, y_pred_orig_h) * 100
+    
+    print(f"  PyTorch Results ({h_name} Horizon): MAE={mae:.2f}, RMSE={rmse:.2f}, MAPE={mape:.2f}%")
+    
+    result = {
+        'model': model_name,
+        'horizon': h_name,
+        'MAE': float(mae),
+        'RMSE': float(rmse),
+        'MAPE': float(mape),
+        'history': history,
+        'y_test': y_test_orig_h.tolist(),
+        'y_pred': y_pred_orig_h.tolist()
+    }
+    
+    outpath = os.path.join(RESULTS_DIR, f'{model_name}_{h_name}.json')
+    with open(outpath, 'w') as f:
+        json.dump(result, f)
+    print(f"  Saved results to: {outpath}")
 
-outpath = os.path.join(RESULTS_DIR, f'{model_name}_{horizon_name}.json')
-with open(outpath, 'w') as f:
-    json.dump(result, f)
-
-print(f"  Saved: {outpath}\n")
+print(f"All horizons trained and saved for model: {model_name}\n")
