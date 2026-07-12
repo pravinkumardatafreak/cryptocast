@@ -220,6 +220,7 @@ Reference: [Bitcoin Whitepaper — Satoshi Nakamoto](https://bitcoin.org/bitcoin
 - **Scikit-learn** — Preprocessing & metrics
 - **Plotly** — Interactive charts
 - **Matplotlib / Seaborn** — Static visualizations
+- **Bun** — Designated JavaScript runtime & package manager (replacing `npm` / `npx` for all current and future JS extension tooling)
 
 ## License
 
