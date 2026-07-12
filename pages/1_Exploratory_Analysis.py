@@ -247,7 +247,7 @@ if df_raw is not None:
         xaxis_title="Daily Log Return (%)",
         yaxis_title="Frequency (Days)",
         height=400,
-        xaxis=dict(range=range_x, gridcolor="#21262d", zerolinecolor="#30363d", color="#8b949e"),
+        xaxis_range=range_x,
     )
     st.plotly_chart(fig_dist, use_container_width=True)
 
