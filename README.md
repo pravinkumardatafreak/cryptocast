@@ -123,7 +123,7 @@ Required columns: `Date, Price, Open, High, Low, Vol., Change %`
 
 ### 4. Run the Full Pipeline
 ```bash
-python cryptocast.py
+bun run pipeline
 ```
 
 This runs all three steps in sequence:
@@ -133,10 +133,23 @@ This runs all three steps in sequence:
 
 ### 5. Launch the Dashboard
 ```bash
-streamlit run app.py
+bun run dev
 ```
 
-Opens at `http://localhost:8502` (launch with `--server.port 8502` to prevent port collisions):
+Opens at `http://localhost:8502`. The `bun run dev` script automatically passes `--server.port 8502` to prevent port collisions with other projects.
+
+### 🥐 All Available Bun Commands
+
+| Command | What it runs |
+|---|---|
+| `bun run dev` | Launch Streamlit dashboard on port 8502 |
+| `bun run pipeline` | Run full training pipeline (`cryptocast.py`) |
+| `bun run train` | Train deep learning models only |
+| `bun run eda` | Run EDA & feature engineering step |
+| `bun run wfv` | Run Walk-Forward Validation only |
+
+> **Note:** Bun 1.3.14 is installed at `C:\Users\pravi\.bun\bin\bun.exe`. Restart your terminal after first install for `bun` to be available globally.
+
 - **Overview (Landing Page)** — Project summary, model descriptions, and business scope
 - **1. Exploratory Analysis** — Historical price trend + Outlier Box Plot + Interactive Return Distribution Zoom
 - **2. Seasonality Analysis** — Intra-month time period return heatmap (Q1–Q4) + win rate stats

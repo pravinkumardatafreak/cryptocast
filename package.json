@@ -1,0 +1,24 @@
+{
+  "name": "cryptocast",
+  "version": "1.0.0",
+  "description": "Multi-Horizon Bitcoin Price Forecasting Dashboard using Deep Learning (1D-CNN, RNN, LSTM, Transformer)",
+  "main": "app.py",
+  "type": "module",
+  "scripts": {
+    "dev": "streamlit run app.py --server.port 8502",
+    "train": "python src/train_model_pytorch.py",
+    "eda": "python src/step1_eda.py",
+    "wfv": "python src/step4_wfv.py",
+    "pipeline": "python cryptocast.py"
+  },
+  "keywords": [
+    "bitcoin",
+    "forecasting",
+    "pytorch",
+    "deep-learning",
+    "streamlit",
+    "bun"
+  ],
+  "author": "Pravin Kumar",
+  "license": "MIT"
+}
