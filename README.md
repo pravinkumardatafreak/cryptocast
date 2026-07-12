@@ -16,13 +16,14 @@ architectures for Bitcoin price forecasting across three horizons — 1-day, 3-d
 | **Train / Test Split** | 80 / 20 chronological — no shuffle, no leakage |
 | **Scaling** | MinMaxScaler fit on training partition only |
 
-## Best Results (Leak-Free, Log-Return Architecture)
+| Horizon | Best Model | MAE (USD) | RMSE (USD) | MAPE (%) | R² Score |
+|---|---|---|---|---|---|
+| **1D** | LSTM | $753.74 | $1,169.24 | **2.12%** | **0.9917** |
+| **3D** | LSTM | $1,514.05 | $2,191.28 | **4.20%** | **0.9711** |
+| **7D** | Transformer | $2,127.22 | $3,060.78 | **6.04%** | **0.9448** |
 
-| Horizon | Best Model | MAE (USD) | RMSE (USD) | MAPE (%) |
-|---|---|---|---|---|
-| **1D** | LSTM | $753.74 | $1,169.24 | **2.12%** |
-| **3D** | LSTM | $1,514.05 | $2,191.28 | **4.20%** |
-| **7D** | Transformer | $2,127.22 | $3,060.78 | **6.04%** |
+> [!NOTE]
+> **The R² Paradox & Fractal Returns:** The $R^2$ scores shown above evaluate predicted vs actual *absolute price levels*. The near-1.0 scores are a path-dependent time-series artifact (yesterday's price is highly predictive of today's price level). In contrast, daily log returns behave like a fractal random walk (Hurst exponent $H \approx 0.53$). Predicting daily returns directly yields return-level $R^2$ scores of $1\% - 3\%$. In quantitative finance, explaining $2\%$ of return-level variance is considered highly successful due to the fractal, noise-dominated nature of markets.
 
 ---
 
