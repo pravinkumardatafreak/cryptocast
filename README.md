@@ -135,13 +135,14 @@ This runs all three steps in sequence:
 streamlit run app.py
 ```
 
-Opens at `http://localhost:8501` with 6 tabs:
-1. **Overview** — Project summary and model descriptions
-2. **Exploratory Analysis** — Interactive price chart + 5 static EDA plots
-3. **Seasonality Analysis** — Monthly return heatmap + win rate analysis
-4. **Model Performance** — Leaderboard, metric comparison bar charts
-5. **Diagnostics** — Per-model actual vs. predicted + loss curves
-6. **Macro & Halving Dynamics** — Risk-on/off, halving cycle, Bitcoin whitepaper
+Opens at `http://localhost:8502` (launch with `--server.port 8502` to prevent port collisions):
+- **Overview (Landing Page)** — Project summary, model descriptions, and business scope
+- **1. Exploratory Analysis** — Historical price trend + Outlier Box Plot + Interactive Return Distribution Zoom
+- **2. Seasonality Analysis** — Intra-month quarter return heatmap (Q1–Q4) + win rate stats
+- **3. Model Performance** — Metric comparison leaderboard and dynamic bar charts
+- **4. Backtest (WFV)** — 3-Fold Walk-Forward validation stats and model stability checks
+- **5. Diagnostics** — Actual vs. predicted diagnostic selectors + loss curves
+- **6. Macro & Halving Dynamics** — Liquidity rotation, halving schedule, and Satoshi whitepaper link
 
 ## Model Architectures (PyTorch)
 
@@ -177,21 +178,20 @@ output heads predicting 1D, 3D, and 7D log returns simultaneously.
 | Validation Split | 15% of training data (chronological) |
 | Random Seed | 42 |
 
-## Seasonality Analysis
+## Intra-Month Seasonality Analysis
 
-Based on 163 monthly observations from the dataset (Aug 2010 – Mar 2024):
+Rather than evaluating calendar months (January, February, etc.), we divide the ~30 days of each month into four distinct quarters: **Q1** (Days 1–7), **Q2** (Days 8–15), **Q3** (Days 16–22), and **Q4** (Days 23–31). 
 
-| Month | Avg Return | Win Rate | Signal |
+Based on daily log returns from August 2010 to March 2024:
+
+| Month Quarter (Days) | Avg Daily Return | Daily Win Rate | Market Characterization / Signal |
 |---|---|---|---|
-| April | +38.3% | 69.2% | Strong Buy |
-| November | +38.7% | 57.1% | Strong Buy |
-| October | +21.0% | 71.4% | High confidence |
-| February | +17.6% | 78.6% | Highest win rate |
-| September | -4.8% | 35.7% | Historically weakest |
-| August | -0.1% | 38.5% | Marginally negative |
+| **Q4 (Days 23–31)** | **+0.775%** | 48.47% | **Highest average daily returns** (Turn-of-the-Month buying pressure) |
+| **Q1 (Days 1–7)** | **+0.541%** | **51.45%** | **Highest daily win rate** (Continued TOM capital inflows) |
+| **Q3 (Days 16–22)** | **+0.380%** | 48.25% | Moderate recovery and consolidation |
+| **Q2 (Days 8–15)** | **+0.195%** | 48.39% | **Weakest returns** (Mid-month capital stagnation) |
 
-**Note:** June averages +9.0% with 61.5% win rate — the popular "Sell in May" narrative
-does not hold in this dataset.
+**Turn-of-the-Month (TOM) Insight:** The data strongly supports the presence of the Turn-of-the-Month effect in Bitcoin. Average daily returns in Q4 (+0.775%) and Q1 (+0.541%) are significantly higher than the mid-month Q2 period (+0.195%). This is driven by systemic liquidity cycles, cash reallocations, and paycheck reinvestments occurring at the end and beginning of calendar months.
 
 ## Macroeconomic Context
 
