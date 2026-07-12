@@ -37,7 +37,8 @@ if torch.cuda.is_available():
     torch.cuda.manual_seed_all(RANDOM_SEED)
 
 # Hyperparameters
-EPOCHS = 50
+# Set to 10 for fast live presentation; converged weights are pre-saved
+EPOCHS = 10
 BATCH_SIZE = 64
 SEQ_LENGTH = 60
 
@@ -281,7 +282,7 @@ history = {
 
 best_val_loss = float('inf')
 best_model_weights = None
-patience = 8
+patience = 3
 patience_counter = 0
 
 print(f"Training multi-output {model_name} using PyTorch...")

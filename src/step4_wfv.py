@@ -35,7 +35,7 @@ torch.manual_seed(RANDOM_SEED)
 if torch.cuda.is_available():
     torch.cuda.manual_seed_all(RANDOM_SEED)
 
-EPOCHS = 20  # Keep epochs low for fast multi-fold training
+EPOCHS = 10  # Keep epochs low for fast multi-fold training in live demo
 BATCH_SIZE = 64
 SEQ_LENGTH = 60
 HORIZON_NAMES = ['1D', '3D', '7D']
@@ -171,7 +171,7 @@ def main():
         raise FileNotFoundError(f"Cleaned dataset not found at {DATA_PATH}. Run step1_eda.py first.")
         
     data = pd.read_csv(DATA_PATH, index_col='Date', parse_dates=True)
-    features = ['Price', 'Open', 'High', 'Low', 'Vol.', 'Change %', 'SMA_7', 'SMA_30', 'RSI_14', 'Vol_30']
+    features = ['Price', 'Open', 'High', 'Low', 'Vol.', 'Change %', 'Block_Reward', 'Days_Since_Halving', 'Halving_Progress']
     raw_prices = data['Price'].values
     
     # 3-Fold Expanding Window boundaries
@@ -254,7 +254,7 @@ def main():
             # Training loop with early stopping
             best_val_loss = float('inf')
             best_weights = None
-            patience = 5
+            patience = 3
             patience_counter = 0
             
             for epoch in range(1, EPOCHS + 1):

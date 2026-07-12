@@ -10,7 +10,7 @@ architectures for Bitcoin price forecasting across three horizons — 1-day, 3-d
 | **Models** | 1D-CNN, RNN, LSTM, Transformer (PyTorch) |
 | **Forecast Horizons** | 1D, 3D, 7D (multi-output, single model per architecture) |
 | **Target Variable** | Log return: `r = ln(P[t+h] / P[t])` — stationary, scale-invariant |
-| **Features** | 10: OHLCV + Change% + SMA_7 + SMA_30 + RSI_14 + Vol_30 |
+| **Features** | 9: OHLCV + Change% + Block_Reward + Days_Since_Halving + Halving_Progress |
 | **Dataset** | ~5,000 daily BTC records (Aug 2010 – Mar 2024) |
 | **Sequence Length** | 60-day sliding window |
 | **Train / Test Split** | 80 / 20 chronological — no shuffle, no leakage |
@@ -20,9 +20,9 @@ architectures for Bitcoin price forecasting across three horizons — 1-day, 3-d
 
 | Horizon | Best Model | MAE (USD) | RMSE (USD) | MAPE (%) |
 |---|---|---|---|---|
-| **1D** | RNN | $771.68 | $1,199.04 | **2.14%** |
-| **3D** | RNN | $1,533.31 | $2,221.77 | **4.26%** |
-| **7D** | Transformer | $2,219.87 | $3,281.06 | **6.09%** |
+| **1D** | LSTM | $753.74 | $1,169.24 | **2.12%** |
+| **3D** | LSTM | $1,514.05 | $2,191.28 | **4.20%** |
+| **7D** | Transformer | $2,127.22 | $3,060.78 | **6.04%** |
 
 **Key methodology decision:** Training on log returns (instead of raw price) eliminated
 extrapolation failure — 1D MAPE dropped from 42.9% → 2.14% after the switch.
@@ -141,9 +141,9 @@ output heads predicting 1D, 3D, and 7D log returns simultaneously.
 
 | Parameter | Value |
 |---|---|
-| Optimizer | Adam (lr=0.001) |
+| Optimizer | Adam (lr=0.001 / 0.0005) |
 | Loss | MSE on log returns |
-| Epochs | 100 (EarlyStopping, patience=15) |
+| Epochs | 10 (Optimized for fast live viva execution; pre-saved outputs exist) |
 | Batch Size | 64 |
 | Validation Split | 15% of training data (chronological) |
 | Random Seed | 42 |

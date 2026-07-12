@@ -215,33 +215,58 @@ plt.close()
 print("  [8/8] Rolling statistics")
 
 # ── 3. Preprocessing ─────────────────────────────────────────
-print("\n[Step 1] Preprocessing data (leak-free & expanded features)...")
+print("\n[Step 1] Preprocessing data (leak-free & whitepaper protocol features)...")
 
-# Technical Indicators
-# 1. Simple Moving Averages (SMAs)
-data['SMA_7'] = data['Price'].rolling(window=7).mean()
-data['SMA_30'] = data['Price'].rolling(window=30).mean()
+# Whitepaper-derived features based on Bitcoin protocol hardcoded rules
+def get_halving_features(dates):
+    dates = pd.to_datetime(dates)
+    h_dates = pd.to_datetime(['2009-01-03', '2012-11-28', '2016-07-09', '2020-05-11', '2024-04-19'])
+    h_rewards = [50.0, 25.0, 12.5, 6.25, 3.125]
+    
+    rewards = []
+    days_since = []
+    progress = []
+    
+    for d in dates:
+        past_idx = np.where(h_dates <= d)[0]
+        if len(past_idx) == 0:
+            epoch_idx = 0
+        else:
+            epoch_idx = past_idx[-1]
+            
+        reward = h_rewards[epoch_idx]
+        last_h = h_dates[epoch_idx]
+        
+        diff_days = (d - last_h).days
+        days_since.append(float(diff_days))
+        rewards.append(reward)
+        
+        if epoch_idx < len(h_dates) - 1:
+            next_h = h_dates[epoch_idx + 1]
+            total_epoch_days = (next_h - last_h).days
+            prog = diff_days / total_epoch_days
+        else:
+            next_h = pd.to_datetime('2028-04-17') # Next halving est.
+            total_epoch_days = (next_h - last_h).days
+            prog = diff_days / total_epoch_days
+            
+        progress.append(prog)
+        
+    return rewards, days_since, progress
 
-# 2. Relative Strength Index (RSI)
-delta = data['Price'].diff()
-gain = delta.clip(lower=0)
-loss = -delta.clip(upper=0)
-avg_gain = gain.rolling(window=14).mean()
-avg_loss = loss.rolling(window=14).mean()
-rs = avg_gain / (avg_loss + 1e-9)
-data['RSI_14'] = 100 - (100 / (1 + rs))
+rewards, days_since, progress = get_halving_features(data.index)
+data['Block_Reward'] = rewards
+data['Days_Since_Halving'] = days_since
+data['Halving_Progress'] = progress
 
-# 3. Rolling Volatility (30-day standard deviation of percent change)
-data['Vol_30'] = data['Change %'].rolling(window=30).std()
-
-# Drop rows with NaNs from rolling calculations
+# Drop rows with NaNs (e.g. initial Change % row)
 data = data.dropna()
 
-# Save cleaned data with technical indicators
+# Save cleaned data with whitepaper features
 data.to_csv(csv_path)
 
-# Features expanded to include technical indicators and price-volume features
-features = ['Price', 'Open', 'High', 'Low', 'Vol.', 'Change %', 'SMA_7', 'SMA_30', 'RSI_14', 'Vol_30']
+# Features list representing the updated whitepaper-derived dataset
+features = ['Price', 'Open', 'High', 'Low', 'Vol.', 'Change %', 'Block_Reward', 'Days_Since_Halving', 'Halving_Progress']
 target_col = 'Price'
 
 # Determine the chronological split index to avoid data leakage
