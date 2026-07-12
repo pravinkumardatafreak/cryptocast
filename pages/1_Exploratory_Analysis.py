@@ -148,6 +148,94 @@ if df_raw is not None:
         if os.path.exists(box_img_path):
             st.image(box_img_path, caption="Box-and-Whisker Plot: Monthly Distribution & Outlier Points", use_container_width=True)
 
+    st.markdown('<div class="cc-section-title">🔍 Interactive Return Distribution Explorer</div>', unsafe_allow_html=True)
+    st.write(
+        "Use this interactive histogram to zoom in and inspect the distribution of Bitcoin's daily log returns. "
+        "Drag your mouse to zoom in on any section, or select a preset zoom from the dropdown below."
+    )
+
+    # Compute daily log returns
+    df_raw["Log_Return"] = np.log(df_raw["Price"] / df_raw["Price"].shift(1)) * 100
+    df_clean = df_raw.dropna()
+
+    mean_ret = df_clean["Log_Return"].mean()
+    std_ret  = df_clean["Log_Return"].std()
+    min_ret  = df_clean["Log_Return"].min()
+    max_ret  = df_clean["Log_Return"].max()
+    min_date = df_clean["Log_Return"].idxmin().strftime("%Y-%m-%d")
+    max_date = df_clean["Log_Return"].idxmax().strftime("%Y-%m-%d")
+
+    m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+    with m_col1:
+        card("Daily Return Mean", f"{mean_ret:.3f}%", "Positive structural drift")
+    with m_col2:
+        card("Daily Volatility (Std Dev)", f"{std_ret:.2f}%", "Standard dispersion width")
+    with m_col3:
+        card("Extreme Flash Crash", f"{min_ret:.1f}%", f"On {min_date} (COVID/Halving)")
+    with m_col4:
+        card("Extreme Bull Spike", f"{max_ret:.1f}%", f"On {max_date}")
+
+    zoom_opt = st.selectbox(
+        "Select Distribution Zoom Preset",
+        [
+            "Full Distribution (All Data)",
+            "Zoom to Center (-5% to +5% - Normal Market Dynamics)",
+            "Zoom to Left Tail (-25% to -5% - Extreme Selloffs & Outliers)",
+            "Zoom to Right Tail (+5% to +25% - Hyper-Bullish Spikes)",
+        ]
+    )
+
+    # Filter data based on zoom preset
+    if "Center" in zoom_opt:
+        plot_df = df_clean[(df_clean["Log_Return"] >= -5) & (df_clean["Log_Return"] <= 5)]
+        range_x = [-6, 6]
+        nbins = 80
+    elif "Left" in zoom_opt:
+        plot_df = df_clean[(df_clean["Log_Return"] >= -25) & (df_clean["Log_Return"] <= -5)]
+        range_x = [-26, -4]
+        nbins = 40
+    elif "Right" in zoom_opt:
+        plot_df = df_clean[(df_clean["Log_Return"] >= 5) & (df_clean["Log_Return"] <= 25)]
+        range_x = [4, 26]
+        nbins = 40
+    else:
+        plot_df = df_clean
+        range_x = [df_clean["Log_Return"].min() - 2, df_clean["Log_Return"].max() + 2]
+        nbins = 150
+
+    fig_dist = go.Figure()
+    fig_dist.add_trace(go.Histogram(
+        x=plot_df["Log_Return"],
+        nbinsx=nbins,
+        marker=dict(color="#38bdf8", line=dict(color="#0d1117", width=0.5)),
+        hovertemplate="Return Bin: %{x:.2f}%<br>Count: %{y}<extra></extra>"
+    ))
+
+    # Add reference lines for full view or center view
+    if "Full" in zoom_opt or "Center" in zoom_opt:
+        # Mean line
+        fig_dist.add_vline(x=mean_ret, line_dash="dash", line_color="#ffffff", line_width=1.5,
+                           annotation_text="Mean", annotation_font_color="#ffffff", annotation_position="top left")
+        # 1-Std Dev
+        fig_dist.add_vline(x=mean_ret - std_ret, line_dash="dot", line_color="#fb923c", line_width=1.2,
+                           annotation_text="-1σ", annotation_font_color="#fb923c", annotation_position="top left")
+        fig_dist.add_vline(x=mean_ret + std_ret, line_dash="dot", line_color="#fb923c", line_width=1.2,
+                           annotation_text="+1σ", annotation_font_color="#fb923c", annotation_position="top right")
+        # 2-Std Dev (Threshold of outliers)
+        fig_dist.add_vline(x=mean_ret - (2 * std_ret), line_dash="dash", line_color="#f87171", line_width=1.2,
+                           annotation_text="-2σ (Outlier Threshold)", annotation_font_color="#f87171", annotation_position="top left")
+        fig_dist.add_vline(x=mean_ret + (2 * std_ret), line_dash="dash", line_color="#f87171", line_width=1.2,
+                           annotation_text="+2σ (Outlier Threshold)", annotation_font_color="#f87171", annotation_position="top right")
+
+    fig_dist.update_layout(
+        **DARK_LAYOUT,
+        xaxis_title="Daily Log Return (%)",
+        yaxis_title="Frequency (Days)",
+        height=400,
+        xaxis=dict(range=range_x, gridcolor="#21262d", zerolinecolor="#30363d", color="#8b949e"),
+    )
+    st.plotly_chart(fig_dist, use_container_width=True)
+
     st.markdown('<div class="cc-section-title">Statistical Visualizations</div>', unsafe_allow_html=True)
     eda_images = {
         "Price Distribution":  "04_price_distribution.png",
