@@ -85,8 +85,8 @@ def load_data():
 df_raw = load_data()
 
 st.markdown('<div class="cc-eyebrow">Intra-month trends</div>', unsafe_allow_html=True)
-st.markdown('<div class="cc-title">Intra-Month Seasonality Analysis</div>', unsafe_allow_html=True)
-st.markdown('<div class="cc-subtitle">Investigate Bitcoin average returns and win rates grouped by monthly quarters: Q1, Q2, Q3, and Q4</div>', unsafe_allow_html=True)
+st.markdown('<div class="cc-title">Intra-Month Time Period Analysis</div>', unsafe_allow_html=True)
+st.markdown('<div class="cc-subtitle">Investigate Bitcoin average returns and win rates grouped by monthly time periods: Q1, Q2, Q3, and Q4</div>', unsafe_allow_html=True)
 
 if df_raw is not None:
     st.markdown('<div class="cc-section-title">Bitcoin Intra-Month Returns Heatmap (%)</div>', unsafe_allow_html=True)
@@ -99,12 +99,12 @@ if df_raw is not None:
         f'All calculations below are derived <b style="color:#4ade80;">exclusively</b> from '
         f'your dataset: <b style="color:#e6edf3;">{date_min} to {date_max}</b> '
         f'({n_years} calendar years, {len(df_raw):,} daily records). '
-        f'We divide each calendar month into four quarters: **Q1** (Days 1-7), **Q2** (Days 8-15), '
+        f'We divide the ~30 days of each month into four distinct time periods: **Q1** (Days 1-7), **Q2** (Days 8-15), '
         f'**Q3** (Days 16-22), and **Q4** (Days 23-31).</p>',
         unsafe_allow_html=True,
     )
     st.write(
-        "Green cells = positive average daily return in that quarter, Red cells = negative average daily return."
+        "Green cells = positive average daily return in that time period, Red cells = negative average daily return."
     )
 
     # Compute daily returns
@@ -113,17 +113,17 @@ if df_raw is not None:
     df_clean["Year"] = df_clean.index.year
     df_clean["Day"]  = df_clean.index.day
 
-    def get_month_quarter(day):
+    def get_time_period(day):
         if day <= 7: return 'Q1'
         elif day <= 15: return 'Q2'
         elif day <= 22: return 'Q3'
         else: return 'Q4'
 
-    df_clean["Month_Quarter"] = df_clean["Day"].apply(get_month_quarter)
+    df_clean["Time_Period"] = df_clean["Day"].apply(get_time_period)
 
-    # Pivot table: Year vs Month_Quarter
+    # Pivot table: Year vs Time_Period
     pivot_df = (
-        df_clean.groupby(["Year", "Month_Quarter"])["Daily_Return"].mean()
+        df_clean.groupby(["Year", "Time_Period"])["Daily_Return"].mean()
         .unstack()
         .reindex(columns=["Q1", "Q2", "Q3", "Q4"])
         .iloc[::-1]
@@ -148,7 +148,7 @@ if df_raw is not None:
     ))
     fig_heat.update_layout(
         **DARK_LAYOUT,
-        xaxis_title="Month Quarter (Stage of Month)",
+        xaxis_title="Time Period (Stage of Month)",
         yaxis_title="Year",
         height=520,
     )
@@ -157,7 +157,7 @@ if df_raw is not None:
     st.markdown('<div class="cc-section-title">Intra-Month Performance Statistics</div>', unsafe_allow_html=True)
     
     # Calculate stats
-    stats_df = df_clean.groupby("Month_Quarter").agg(
+    stats_df = df_clean.groupby("Time_Period").agg(
         Avg_Return=("Daily_Return", "mean"),
         Win_Rate=("Daily_Return", lambda x: (x > 0).sum() / x.notna().sum() * 100)
     ).reindex(["Q1", "Q2", "Q3", "Q4"])
@@ -165,7 +165,7 @@ if df_raw is not None:
     col_m1, col_m2 = st.columns(2)
 
     with col_m1:
-        st.markdown("**Average Daily Return (%) by Month Quarter**")
+        st.markdown("**Average Daily Return (%) by Time Period**")
         bar_colors = ["#4ade80" if v >= 0 else "#f87171" for v in stats_df["Avg_Return"].values]
         fig_avg = go.Figure(go.Bar(
             x=stats_df.index,
@@ -183,7 +183,7 @@ if df_raw is not None:
         st.plotly_chart(fig_avg, use_container_width=True)
 
     with col_m2:
-        st.markdown("**Daily Win Rate (%) by Month Quarter**")
+        st.markdown("**Daily Win Rate (%) by Time Period**")
         fig_win = go.Figure(go.Bar(
             x=stats_df.index,
             y=stats_df["Win_Rate"],
@@ -205,13 +205,13 @@ if df_raw is not None:
         st.plotly_chart(fig_win, use_container_width=True)
 
     callout(
-        "Key Seasonality Observations (The Turn-of-the-Month Effect)",
+        "Key Time Period Observations (The Turn-of-the-Month Effect)",
         "<ul>"
         "<li><b>Q4 (Days 23-31) Peak Performance (+0.775%):</b> This period exhibits the absolute "
         "highest average daily return in the dataset. This represents a classic <b>Turn-of-the-Month (TOM) effect</b> "
         "where asset managers, index funds, and individuals reallocate capital and buy assets at the end of the month.</li>"
         "<li><b>Q1 (Days 1-7) Positive Momentum (+0.541%):</b> Continuing the TOM effect, the first week of the month "
-        "retains a positive daily drift, exhibiting the highest daily win rate (**51.45%**) of any quarter.</li>"
+        "retains a positive daily drift, exhibiting the highest daily win rate (**51.45%**) of any time period.</li>"
         "<li><b>Q2 (Days 8-15) Weakest Mid-Month (+0.195%):</b> Average daily returns drop substantially to their cycle "
         "lows, accompanied by a below-baseline win rate (**48.39%**), indicating a historical stagnation mid-month.</li>"
         "<li><b>Q3 (Days 16-22) Recovery (+0.380%):</b> The market starts climbing again with positive daily returns, "

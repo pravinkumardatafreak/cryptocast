@@ -138,7 +138,7 @@ streamlit run app.py
 Opens at `http://localhost:8502` (launch with `--server.port 8502` to prevent port collisions):
 - **Overview (Landing Page)** — Project summary, model descriptions, and business scope
 - **1. Exploratory Analysis** — Historical price trend + Outlier Box Plot + Interactive Return Distribution Zoom
-- **2. Seasonality Analysis** — Intra-month quarter return heatmap (Q1–Q4) + win rate stats
+- **2. Seasonality Analysis** — Intra-month time period return heatmap (Q1–Q4) + win rate stats
 - **3. Model Performance** — Metric comparison leaderboard and dynamic bar charts
 - **4. Backtest (WFV)** — 3-Fold Walk-Forward validation stats and model stability checks
 - **5. Diagnostics** — Actual vs. predicted diagnostic selectors + loss curves
@@ -178,13 +178,13 @@ output heads predicting 1D, 3D, and 7D log returns simultaneously.
 | Validation Split | 15% of training data (chronological) |
 | Random Seed | 42 |
 
-## Intra-Month Seasonality Analysis
+## Intra-Month Time Period Analysis
 
-Rather than evaluating calendar months (January, February, etc.), we divide the ~30 days of each month into four distinct quarters: **Q1** (Days 1–7), **Q2** (Days 8–15), **Q3** (Days 16–22), and **Q4** (Days 23–31). 
+Rather than evaluating calendar months (January, February, etc.), we divide the ~30 days of each month into four distinct time periods: **Q1** (Days 1–7), **Q2** (Days 8–15), **Q3** (Days 16–22), and **Q4** (Days 23–31). 
 
 Based on daily log returns from August 2010 to March 2024:
 
-| Month Quarter (Days) | Avg Daily Return | Daily Win Rate | Market Characterization / Signal |
+| Time Period (Days) | Avg Daily Return | Daily Win Rate | Market Characterization / Signal |
 |---|---|---|---|
 | **Q4 (Days 23–31)** | **+0.775%** | 48.47% | **Highest average daily returns** (Turn-of-the-Month buying pressure) |
 | **Q1 (Days 1–7)** | **+0.541%** | **51.45%** | **Highest daily win rate** (Continued TOM capital inflows) |
