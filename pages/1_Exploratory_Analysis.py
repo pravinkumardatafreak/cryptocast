@@ -59,6 +59,13 @@ st.markdown(
         .cc-callout.warn { border-left-color: #fb923c; }
         .cc-callout h4 { margin-top: 0; margin-bottom: 8px; font-size: 14px; font-weight: 600; color: #e6edf3; }
         .cc-callout p, .cc-callout li { margin: 0; font-size: 13px; color: #c9d1d9; line-height: 1.6; }
+        .cc-card {
+            background: #161b22; border: 1px solid #21262d;
+            border-radius: 10px; padding: 18px 20px; height: 100%;
+        }
+        .cc-card h4 { margin-top: 0; margin-bottom: 8px; font-size: 13px; color: #8b949e; font-weight: 500; }
+        .cc-card .cc-value { margin: 0; font-size: 24px; font-weight: 700; color: #e6edf3; }
+        .cc-card .cc-detail { margin-top: 6px; margin-bottom: 0; font-size: 11px; color: #8b949e; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -72,6 +79,14 @@ DARK_LAYOUT = dict(
     yaxis=dict(gridcolor="#21262d", zerolinecolor="#30363d", color="#8b949e"),
     margin=dict(t=30, b=30, l=10, r=10),
 )
+
+def card(label, value, detail=""):
+    st.markdown(
+        f'<div class="cc-card"><h4>{label}</h4>'
+        f'<p class="cc-value">{value}</p>'
+        f'<p class="cc-detail">{detail}</p></div>',
+        unsafe_allow_html=True,
+    )
 
 def callout(title, body_html, warn=False):
     cls = "cc-callout warn" if warn else "cc-callout"
