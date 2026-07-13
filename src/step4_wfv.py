@@ -174,27 +174,47 @@ def main():
     features = ['Price', 'Open', 'High', 'Low', 'Vol.', 'Change %', 'Block_Reward', 'Days_Since_Halving', 'Halving_Progress']
     raw_prices = data['Price'].values
     
-    # 3-Fold Expanding Window boundaries
-    # We will split on the total sequence length to align indices exactly
-    M = len(data) - SEQ_LENGTH - 7 + 1
-    
+    M = len(data) - SEQ_LENGTH - 7 + 1  # total number of sequence samples
+
+    # ── Halving-Aligned WFV Boundaries ────────────────────────────
+    # Bitcoin's 4-year halving cycle is the protocol's natural market epoch.
+    # Each test window covers one complete halving epoch to evaluate whether
+    # the model generalises across a full bull→bear→recovery cycle.
+    #
+    #   Halving 2 date: 2016-07-09  (block reward: 50 → 25 → 12.5 BTC)
+    #   Halving 3 date: 2020-05-11  (block reward: 12.5 → 6.25 BTC)
+    #   Dataset end:    2024-03-24  (just before Halving 4: 2024-04-19)
+    #
+    #   Fold 1 → Train: 2010–2016-07-09  |  Test: Epoch 2 (2016-07-09 → 2020-05-11)
+    #   Fold 2 → Train: 2010–2020-05-11  |  Test: Epoch 3 (2020-05-11 → 2024-03-24)
+
+    HALVING2 = pd.Timestamp('2016-07-09')
+    HALVING3 = pd.Timestamp('2020-05-11')
+
+    # Map calendar dates to sequence-sample indices
+    # Each sample i has its last input at data.index[i + SEQ_LENGTH - 1]
+    # and its target at data.index[i + SEQ_LENGTH - 1 + max_horizon]
+    sample_dates = pd.Series(
+        [data.index[i + SEQ_LENGTH - 1] for i in range(M)],
+        index=range(M)
+    )
+
+    h2_idx = int((sample_dates < HALVING2).sum())
+    h3_idx = int((sample_dates < HALVING3).sum())
+
     folds = [
         {
-            'train_end': int(M * 0.60),
-            'test_end': int(M * 0.7333),
-            'desc': 'Fold 1: 2010-2018 (Train) -> 2019-2020 (Test)'
+            'train_end': h2_idx,
+            'test_end':  h3_idx,
+            'desc': 'Fold 1 (Halving Epoch 2): Train 2010->2016-07-09 | Test 2016-07-09->2020-05-11 (~4 yrs)'
         },
         {
-            'train_end': int(M * 0.7333),
-            'test_end': int(M * 0.8666),
-            'desc': 'Fold 2: 2010-2020 (Train) -> 2020-2022 (Test)'
+            'train_end': h3_idx,
+            'test_end':  M,
+            'desc': 'Fold 2 (Halving Epoch 3): Train 2010->2020-05-11 | Test 2020-05-11->2024-03-24 (~4 yrs)'
         },
-        {
-            'train_end': int(M * 0.8666),
-            'test_end': M,
-            'desc': 'Fold 3: 2010-2022 (Train) -> 2022-2024 (Test)'
-        }
     ]
+
     
     wfv_results = {}
     
@@ -203,7 +223,7 @@ def main():
         wfv_results[model_name] = []
         
         for fold_idx, fold in enumerate(folds, 1):
-            print(f"  Running Fold {fold_idx}/3: {fold['desc']}")
+            print(f"  Running Fold {fold_idx}/{len(folds)}: {fold['desc']}")
             
             # 1. Feature scaling strictly fit on train partition to avoid leakage
             train_idx_end = fold['train_end']

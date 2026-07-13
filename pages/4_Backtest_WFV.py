@@ -100,35 +100,45 @@ st.write(
 )
 
 callout(
-    "3-Fold Expanding Window Setup",
+    "2-Fold Halving-Aligned Expanding Window Setup",
     "<ul>"
-    "<li><b>Fold 1:</b> Train on 2010-2018 -> Test on 2019-2020 (Consolidation phase)</li>"
-    "<li><b>Fold 2:</b> Train on 2010-2020 -> Test on 2020-2022 (Bull run & crash)</li>"
-    "<li><b>Fold 3:</b> Train on 2010-2022 -> Test on 2022-2024 (Bear market & recovery)</li>"
+    "<li><b>Fold 1 (Halving Epoch 2):</b> Train 2010 → 2016-07-09 | Test 2016-07-09 → 2020-05-11 (~4 years: ICO mania & consolidation)</li>"
+    "<li><b>Fold 2 (Halving Epoch 3):</b> Train 2010 → 2020-05-11 | Test 2020-05-11 → 2024-03-24 (~4 years: COVID crash, parabolic bull run, bear market & recovery)</li>"
     "</ul>"
+    "<p style='margin-top:10px;color:#8b949e;font-size:12px;'>Each test window covers exactly one complete Bitcoin halving epoch — the protocol's natural 4-year market cycle. "
+    "This is far more economically meaningful than arbitrary 2-year splits.</p>"
 )
 
 if df_wfv is not None:
+    NUM_FOLDS = 2  # Halving-aligned: 2 complete epochs
     col_w1, col_w2 = st.columns(2)
     selected_model = col_w1.selectbox("Select Model for WFV Analysis", ["RNN", "1D-CNN", "LSTM", "Transformer"])
     selected_horizon = col_w2.selectbox("Select Horizon for WFV Analysis", ["1D", "3D", "7D"])
-    
+
+    FOLD_LABELS = [
+        "Fold 1 — Epoch 2 (2016–2020)",
+        "Fold 2 — Epoch 3 (2020–2024)",
+    ]
+
     # Display table for chosen combination across folds
     fold_data = []
-    for f_idx in range(3):
+    for f_idx in range(NUM_FOLDS):
+        if f_idx >= len(df_wfv[selected_model]):
+            break
         metrics = df_wfv[selected_model][f_idx][selected_horizon]
         fold_data.append({
-            "Fold": f"Fold {f_idx + 1}",
+            "Fold": FOLD_LABELS[f_idx],
             "MAE (USD)": f"${metrics['MAE']:,.2f}",
             "RMSE (USD)": f"${metrics['RMSE']:,.2f}",
             "MAPE (%)": f"{metrics['MAPE']:.2f}%",
             "raw_mape": metrics['MAPE']
         })
-        
+
     # Calculate Average
-    avg_mae = np.mean([df_wfv[selected_model][f_idx][selected_horizon]['MAE'] for f_idx in range(3)])
-    avg_rmse = np.mean([df_wfv[selected_model][f_idx][selected_horizon]['RMSE'] for f_idx in range(3)])
-    avg_mape = np.mean([df_wfv[selected_model][f_idx][selected_horizon]['MAPE'] for f_idx in range(3)])
+    valid_n = len(fold_data)
+    avg_mae  = np.mean([df_wfv[selected_model][f][selected_horizon]['MAE']  for f in range(valid_n)])
+    avg_rmse = np.mean([df_wfv[selected_model][f][selected_horizon]['RMSE'] for f in range(valid_n)])
+    avg_mape = np.mean([df_wfv[selected_model][f][selected_horizon]['MAPE'] for f in range(valid_n)])
     
     fold_data.append({
         "Fold": "Average",
