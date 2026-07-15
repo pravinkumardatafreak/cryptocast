@@ -10,6 +10,10 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.streamlit_utils import inject_custom_css, card, callout, DARK_LAYOUT
+inject_custom_css()
 
 # Paths
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -17,51 +21,6 @@ RESULTS_DIR = os.path.join(PROJECT_DIR, "results")
 VIZ_DIR     = os.path.join(PROJECT_DIR, "visualizations")
 
 # CSS Styles
-st.markdown(
-    """
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        html, body, [data-testid="stAppViewContainer"], .stApp {
-            background-color: #0d1117 !important;
-            font-family: 'Inter', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
-        }
-        [data-testid="stHeader"] { background: transparent; }
-        #MainMenu, footer { visibility: hidden; }
-        .block-container { padding: 2rem 2.5rem; max-width: 1280px; }
-        [data-testid="stSidebar"] {
-            background-color: #161b22 !important;
-            border-right: 1px solid #21262d;
-        }
-        [data-testid="stSidebar"] * { color: #c9d1d9 !important; }
-        p, li, span, label { color: #c9d1d9; }
-        h1, h2, h3, h4, h5, h6 { color: #e6edf3; }
-        .cc-eyebrow {
-            font-size: 11px; font-weight: 600; letter-spacing: 0.1em;
-            text-transform: uppercase; color: #4ade80; margin-bottom: 6px;
-        }
-        .cc-title {
-            font-size: 32px; font-weight: 700; color: #e6edf3;
-            margin-bottom: 4px; letter-spacing: -0.02em; line-height: 1.2;
-        }
-        .cc-subtitle { font-size: 14px; color: #8b949e; margin-bottom: 28px; }
-        .cc-section-title {
-            font-size: 18px; font-weight: 600; color: #e6edf3;
-            margin-top: 24px; margin-bottom: 12px;
-            padding-bottom: 8px; border-bottom: 1px solid #21262d;
-        }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-DARK_LAYOUT = dict(
-    plot_bgcolor="#0d1117",
-    paper_bgcolor="#0d1117",
-    font=dict(color="#c9d1d9", family="Inter, sans-serif"),
-    xaxis=dict(gridcolor="#21262d", zerolinecolor="#30363d", color="#8b949e"),
-    yaxis=dict(gridcolor="#21262d", zerolinecolor="#30363d", color="#8b949e"),
-    margin=dict(t=30, b=30, l=10, r=10),
-)
 
 st.markdown('<div class="cc-eyebrow">Auditing</div>', unsafe_allow_html=True)
 st.markdown('<div class="cc-title">Model Diagnostics</div>', unsafe_allow_html=True)
@@ -194,8 +153,8 @@ if os.path.exists(json_path):
         bgcolor="rgba(13,17,23,0.8)", bordercolor="#38bdf8",
     )
 
+    fig_avp.update_layout(**DARK_LAYOUT)
     fig_avp.update_layout(
-        **DARK_LAYOUT,
         title=dict(
             text=f"{mdl} ({horz} horizon): Actual vs Predicted | with Monthly CPI Inflation",
             font=dict(color="#e6edf3", size=14),
@@ -206,9 +165,10 @@ if os.path.exists(json_path):
             color="#8b949e", side="left",
         ),
         yaxis2=dict(
-            title="CPI Inflation YoY (%)", overlaying="y", side="right",
+            title=dict(text="CPI Inflation YoY (%)", font=dict(color="#38bdf8")),
+            overlaying="y", side="right",
             color="#38bdf8", showgrid=False, tickformat=".1f",
-            titlefont=dict(color="#38bdf8"), tickfont=dict(color="#38bdf8"),
+            tickfont=dict(color="#38bdf8"),
         ),
         hovermode="x unified",
         height=460,

@@ -11,88 +11,16 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.streamlit_utils import inject_custom_css, card, callout, DARK_LAYOUT
+inject_custom_css()
 
 # Paths
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESULTS_CSV = os.path.join(PROJECT_DIR, "model_comparison_results.csv")
 
 # CSS Styles
-st.markdown(
-    """
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        html, body, [data-testid="stAppViewContainer"], .stApp {
-            background-color: #0d1117 !important;
-            font-family: 'Inter', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
-        }
-        [data-testid="stHeader"] { background: transparent; }
-        #MainMenu, footer { visibility: hidden; }
-        .block-container { padding: 2rem 2.5rem; max-width: 1280px; }
-        [data-testid="stSidebar"] {
-            background-color: #161b22 !important;
-            border-right: 1px solid #21262d;
-        }
-        [data-testid="stSidebar"] * { color: #c9d1d9 !important; }
-        p, li, span, label { color: #c9d1d9; }
-        h1, h2, h3, h4, h5, h6 { color: #e6edf3; }
-        .cc-eyebrow {
-            font-size: 11px; font-weight: 600; letter-spacing: 0.1em;
-            text-transform: uppercase; color: #4ade80; margin-bottom: 6px;
-        }
-        .cc-title {
-            font-size: 32px; font-weight: 700; color: #e6edf3;
-            margin-bottom: 4px; letter-spacing: -0.02em; line-height: 1.2;
-        }
-        .cc-subtitle { font-size: 14px; color: #8b949e; margin-bottom: 28px; }
-        .cc-section-title {
-            font-size: 18px; font-weight: 600; color: #e6edf3;
-            margin-top: 24px; margin-bottom: 12px;
-            padding-bottom: 8px; border-bottom: 1px solid #21262d;
-        }
-        .cc-callout {
-            background: #161b22; border-left: 4px solid #4ade80;
-            border-radius: 0 8px 8px 0; padding: 16px 20px; margin: 16px 0;
-            border-top: 1px solid #21262d; border-right: 1px solid #21262d; border-bottom: 1px solid #21262d;
-        }
-        .cc-callout h4 { margin-top: 0; margin-bottom: 8px; font-size: 14px; font-weight: 600; color: #e6edf3; }
-        .cc-callout p, .cc-callout li { margin: 0; font-size: 13px; color: #c9d1d9; line-height: 1.6; }
-        .leaderboard-header {
-            display: flex; background: #161b22; padding: 12px 20px;
-            border-bottom: 1px solid #21262d; font-size: 12px; font-weight: 600; color: #8b949e;
-        }
-        .leaderboard-row {
-            display: flex; padding: 16px 20px; border-bottom: 1px solid #21262d;
-            align-items: center; font-size: 14px; background: #0d1117;
-        }
-        .leaderboard-row:last-child { border-bottom: none; }
-        .badge-horizon {
-            background: #21262d; color: #c9d1d9; font-size: 11px; font-weight: 600;
-            padding: 3px 8px; border-radius: 4px;
-        }
-        .badge-best {
-            background: rgba(74, 222, 128, 0.15); color: #4ade80; font-size: 10px;
-            font-weight: 700; padding: 2px 6px; border-radius: 4px; margin-left: 8px;
-            border: 1px solid rgba(74, 222, 128, 0.3);
-        }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-DARK_LAYOUT = dict(
-    plot_bgcolor="#0d1117",
-    paper_bgcolor="#0d1117",
-    font=dict(color="#c9d1d9", family="Inter, sans-serif"),
-    xaxis=dict(gridcolor="#21262d", zerolinecolor="#30363d", color="#8b949e"),
-    yaxis=dict(gridcolor="#21262d", zerolinecolor="#30363d", color="#8b949e"),
-    margin=dict(t=30, b=30, l=10, r=10),
-)
-
-def callout(title, body_html):
-    st.markdown(
-        f'<div class="cc-callout"><h4>{title}</h4>{body_html}</div>',
-        unsafe_allow_html=True,
-    )
 
 @st.cache_data(ttl=0)
 def load_results():
@@ -119,23 +47,14 @@ if df_results is not None:
     from sklearn.metrics import r2_score
     import json
 
-    best = (
-        df_results.loc[df_results.groupby("Horizon")["MAE"].idxmin()]
-        .set_index("Horizon")["Model"]
-        .to_dict()
-    )
+    from sklearn.metrics import r2_score
+    import json
 
-    rows_html = ""
+    # Calculate R2 dynamically from prediction files and add to dataframe
+    r2_scores = []
     for _, row in df_results.iterrows():
         horizon  = row["Horizon"]
         model    = row["Model"]
-        mae      = row["MAE"]
-        rmse     = row["RMSE"]
-        mape     = row["MAPE (%)"]
-        is_best  = best.get(horizon) == model
-        badge    = '<span class="badge-best">BEST</span>' if is_best else ""
-        
-        # Calculate R2 dynamically from prediction files
         r2_val = np.nan
         json_path = os.path.join(PROJECT_DIR, "results", f"{model}_{horizon}.json")
         if os.path.exists(json_path):
@@ -145,40 +64,30 @@ if df_results is not None:
                     r2_val = r2_score(data["y_test"], data["y_pred"])
             except Exception:
                 pass
+        r2_scores.append(f"{r2_val:.4f}" if not np.isnan(r2_val) else "N/A")
+    
+    df_results["R² Score"] = r2_scores
 
-        if mape < 5:
-            mape_color = "#4ade80"
-        elif mape < 10:
-            mape_color = "#fb923c"
-        else:
-            mape_color = "#f87171"
-            
-        r2_str = f"{r2_val:.4f}" if not np.isnan(r2_val) else "N/A"
-        
-        rows_html += (
-            f'<div class="leaderboard-row">'
-            f'<div style="width:80px"><span class="badge-horizon">{horizon}</span></div>'
-            f'<div style="flex:1;color:#58a6ff;font-weight:500">{model}{badge}</div>'
-            f'<div style="width:130px;text-align:right;font-weight:600;color:#e6edf3">${mae:,.2f}</div>'
-            f'<div style="width:130px;text-align:right;color:#8b949e">${rmse:,.2f}</div>'
-            f'<div style="width:110px;text-align:right;font-weight:600;color:{mape_color}">{mape:.2f}%</div>'
-            f'<div style="width:100px;text-align:right;font-weight:600;color:#58a6ff">{r2_str}</div>'
-            f'</div>'
-        )
-
-    st.markdown(
-        '<div style="background:#0d1117;border:1px solid #21262d;border-radius:10px;overflow:hidden;margin-bottom:24px;">'
-        '<div class="leaderboard-header">'
-        '<div style="width:80px">Horizon</div>'
-        '<div style="flex:1">Model Architecture</div>'
-        '<div style="width:130px;text-align:right">MAE (USD)</div>'
-        '<div style="width:130px;text-align:right">RMSE (USD)</div>'
-        '<div style="width:110px;text-align:right">MAPE (%)</div>'
-        '<div style="width:100px;text-align:right">R² Score</div>'
-        '</div>'
-        + rows_html + '</div>',
-        unsafe_allow_html=True,
+    # Display as a clean Streamlit dataframe
+    st.dataframe(
+        df_results,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "MAE": st.column_config.NumberColumn("MAE (USD)", format="$%.2f"),
+            "RMSE": st.column_config.NumberColumn("RMSE (USD)", format="$%.2f"),
+            "MAPE (%)": st.column_config.NumberColumn("MAPE (%)", format="%.2f%%"),
+        }
     )
+
+    with st.expander("Methodology Reference: Understanding the Metrics"):
+        st.markdown(
+            "**MAE (Mean Absolute Error):** Measures the average magnitude of absolute dollar errors. "
+            "For example, an MAE of $750 means the model's price predictions deviate by $750 on average.\n\n"
+            "**MAPE (Mean Absolute Percentage Error):** Scales the error relative to the actual price. "
+            "This is crucial for Bitcoin, as a $750 error matters much less when BTC is at $70,000 compared to when it was at $10,000. "
+            "A MAPE below 5% is considered exceptionally strong for highly volatile crypto assets."
+        )
 
     st.markdown('<div class="cc-section-title">Visual Metric Comparison</div>', unsafe_allow_html=True)
     metric_opt = st.selectbox("Compare by metric", ["MAE", "RMSE", "MAPE (%)"])
