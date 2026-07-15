@@ -50,11 +50,25 @@ if df_results is not None:
     from sklearn.metrics import r2_score
     import json
 
-    # Calculate R2 dynamically from prediction files and add to dataframe
+    # Find the best model (lowest MAE) for each horizon
+    best = (
+        df_results.loc[df_results.groupby("Horizon")["MAE"].idxmin()]
+        .set_index("Horizon")["Model"]
+        .to_dict()
+    )
+
+    # Calculate R2 dynamically from prediction files and format Model names
     r2_scores = []
+    model_names = []
+    
     for _, row in df_results.iterrows():
         horizon  = row["Horizon"]
         model    = row["Model"]
+        
+        # Add BEST badge
+        display_name = f"🏆 {model} (BEST)" if best.get(horizon) == model else model
+        model_names.append(display_name)
+        
         r2_val = np.nan
         json_path = os.path.join(PROJECT_DIR, "results", f"{model}_{horizon}.json")
         if os.path.exists(json_path):
@@ -66,6 +80,7 @@ if df_results is not None:
                 pass
         r2_scores.append(f"{r2_val:.4f}" if not np.isnan(r2_val) else "N/A")
     
+    df_results["Model"] = model_names
     df_results["R² Score"] = r2_scores
 
     # Display as a clean Streamlit dataframe
