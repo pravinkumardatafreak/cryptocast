@@ -205,6 +205,60 @@ if os.path.exists(json_path):
         legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#c9d1d9")),
     )
     st.plotly_chart(fig_loss, use_container_width=True)
+    
+    # ── Residual Diagnostics ───────────────────────────────────────────────
+    st.markdown('<div class="cc-section-title">Residual Diagnostics (Statistical Validation)</div>', unsafe_allow_html=True)
+    st.markdown('<p style="color:#8b949e;font-size:14px;margin-bottom:15px;">'
+                'Analyzing the residuals (Actual - Predicted). If a model has extracted all available signal, '
+                'the residuals should look like random "White Noise" with no distinct autocorrelation patterns.</p>', 
+                unsafe_allow_html=True)
+                
+    residuals = np.array(y_actual) - np.array(y_pred)
+    
+    r1, r2 = st.columns(2)
+    
+    with r1:
+        # Residual Distribution
+        fig_dist = go.Figure()
+        fig_dist.add_trace(go.Histogram(
+            x=residuals, nbinsx=50, name="Residuals", 
+            marker_color="#8b5cf6", opacity=0.75
+        ))
+        fig_dist.update_layout(
+            **DARK_LAYOUT,
+            title=dict(text="Residual Distribution", font=dict(color="#e6edf3")),
+            xaxis_title="Error (USD)", yaxis_title="Count",
+            height=300, showlegend=False
+        )
+        st.plotly_chart(fig_dist, use_container_width=True)
+        
+    with r2:
+        # Autocorrelation (ACF)
+        try:
+            from statsmodels.tsa.stattools import acf
+            # Calculate ACF for up to 40 lags
+            acf_vals, confint = acf(residuals, nlags=40, alpha=0.05)
+            lags = np.arange(len(acf_vals))
+            
+            fig_acf = go.Figure()
+            # Confidence intervals
+            fig_acf.add_trace(go.Scatter(x=lags, y=confint[:,1]-acf_vals, mode='lines', line_color='rgba(255,255,255,0)', showlegend=False))
+            fig_acf.add_trace(go.Scatter(x=lags, y=confint[:,0]-acf_vals, mode='lines', line_color='rgba(255,255,255,0)', fill='tonexty', fillcolor='rgba(56,189,248,0.2)', showlegend=False))
+            
+            # Stem plot for ACF
+            for i in range(len(lags)):
+                fig_acf.add_trace(go.Scatter(x=[lags[i], lags[i]], y=[0, acf_vals[i]], mode='lines', line=dict(color='#38bdf8', width=2), showlegend=False))
+            fig_acf.add_trace(go.Scatter(x=lags, y=acf_vals, mode='markers', marker=dict(color='#38bdf8', size=6), showlegend=False))
+            
+            fig_acf.update_layout(
+                **DARK_LAYOUT,
+                title=dict(text="Autocorrelation (ACF) of Residuals", font=dict(color="#e6edf3")),
+                xaxis_title="Lag (Days)", yaxis_title="ACF",
+                height=300
+            )
+            st.plotly_chart(fig_acf, use_container_width=True)
+        except ImportError:
+            st.warning("Please install statsmodels (`pip install statsmodels`) to view the ACF plot.")
 else:
     st.info(f"No saved results for {mdl} / {horz}. Run the training pipeline first.")
     i1, i2 = st.columns(2)

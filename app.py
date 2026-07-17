@@ -23,10 +23,25 @@ PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # CSS Styles
 
-# Sidebar indicator
+# Sidebar indicator & Settings
 with st.sidebar:
     st.markdown("### CryptoCast Navigation")
     st.caption("Select a page above to drill down into metrics, backtests, or market cycles.")
+    
+    st.markdown("---")
+    st.markdown("### ⚙️ Settings")
+    
+    # Check if key is available in env vars
+    has_env_key = bool(os.getenv("GROQ_API_KEY"))
+    
+    st.session_state["GROQ_API_KEY"] = st.text_input(
+        "Groq API Key",
+        value=st.session_state.get("GROQ_API_KEY", ""),
+        type="password",
+        placeholder="console.groq.com API Key" if not has_env_key else "Loaded from .env",
+        disabled=has_env_key,
+        help="Required for AI Insights. Get a free key at console.groq.com"
+    )
 
 # Header
 st.markdown('<div class="cc-eyebrow">Capstone Project</div>', unsafe_allow_html=True)

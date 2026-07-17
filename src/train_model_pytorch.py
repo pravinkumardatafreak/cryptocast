@@ -248,27 +248,126 @@ class TransformerModel(nn.Module):
         return self.fc2(x)
 
 
+class RevIN(nn.Module):
+    """
+    Reversible Instance Normalization for solving magnitude shift in Time Series.
+    """
+    def __init__(self, num_features, eps=1e-5):
+        super(RevIN, self).__init__()
+        self.num_features = num_features
+        self.eps = eps
+        self.affine = nn.Parameter(torch.ones(num_features))
+        self.beta = nn.Parameter(torch.zeros(num_features))
+
+    def forward(self, x, mode):
+        if mode == 'norm':
+            self.mean = torch.mean(x, dim=1, keepdim=True).detach()
+            self.stdev = torch.sqrt(torch.var(x, dim=1, keepdim=True, unbiased=False) + self.eps).detach()
+            x = x - self.mean
+            x = x / self.stdev
+            x = x * self.affine + self.beta
+            return x
+        elif mode == 'denorm':
+            # x shape: (batch, 3)
+            x = x - self.beta[0]
+            x = x / self.affine[0]
+            x = x * self.stdev[:, :, 0]
+            x = x + self.mean[:, :, 0]
+            return x
+
+
+class PatchTSTModel(nn.Module):
+    """
+    State-of-the-art Patch Time Series Transformer with RevIN.
+    Instead of point-wise tokens, we use patches.
+    """
+    def __init__(self, input_dim, seq_len=60, patch_len=12, stride=12, d_model=128, n_heads=4, e_layers=3, dropout=0.2):
+        super().__init__()
+        self.revin = RevIN(input_dim)
+        self.patch_len = patch_len
+        self.stride = stride
+        self.patch_num = int((seq_len - patch_len) / stride + 1)
+        
+        self.value_embedding = nn.Linear(patch_len * input_dim, d_model)
+        self.position_embedding = nn.Parameter(torch.empty(1, self.patch_num, d_model))
+        nn.init.uniform_(self.position_embedding, -0.1, 0.1)
+        
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model, nhead=n_heads, dim_feedforward=256,
+            dropout=dropout, activation='gelu', batch_first=True
+        )
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=e_layers)
+        
+        self.head = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(self.patch_num * d_model, 64),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(64, 3)
+        )
+
+    def forward(self, x):
+        # x shape: (batch, seq_len, features)
+        x = self.revin(x, 'norm')
+        
+        # Unfold to create patches: (batch, patch_num, patch_len, features)
+        patches = x.unfold(dimension=1, size=self.patch_len, step=self.stride)
+        
+        # Flatten patches: (batch, patch_num, patch_len * features)
+        patches = patches.reshape(patches.shape[0], patches.shape[1], -1)
+        
+        x = self.value_embedding(patches) + self.position_embedding
+        x = self.encoder(x)
+        
+        x = self.head(x) # (batch, 3)
+        return x
+
+
 # ==========================================
 # 3. TRAINING COORDINATION
 # ==========================================
 
 # Instantiate model
-if model_name == '1D-CNN':
-    model = CNN1D(input_dim)
-elif model_name == 'RNN':
-    model = RNNModel(input_dim)
-elif model_name == 'LSTM':
-    model = LSTMModel(input_dim)
-elif model_name == 'Transformer':
-    model = TransformerModel(input_dim)
+models = {
+    '1D-CNN': CNN1D(input_dim),
+    'RNN': RNNModel(input_dim),
+    'LSTM': LSTMModel(input_dim),
+    'Transformer': TransformerModel(input_dim),
+    'PatchTST': PatchTSTModel(input_dim)
+}
+
+if model_name in models:
+    model = models[model_name]
 else:
     raise ValueError(f"Unknown model architecture: {model_name}")
 
+# Custom Loss Function to penalize 1-Day Lag
+class DirectionalMSELoss(nn.Module):
+    def __init__(self, alpha=0.1):
+        """
+        alpha controls the strength of the directional penalty.
+        """
+        super().__init__()
+        self.mse = nn.MSELoss()
+        self.alpha = alpha
+        
+    def forward(self, y_pred, y_true):
+        # 1. Base magnitude error
+        mse_loss = self.mse(y_pred, y_true)
+        
+        # 2. Directional Penalty
+        # If true is positive and pred is negative (or vice versa), their product is negative.
+        # We penalize by the magnitude of the prediction in the wrong direction.
+        true_sign = torch.sign(y_true)
+        dir_penalty = torch.mean(torch.relu(-y_pred * true_sign))
+        
+        return mse_loss + (self.alpha * dir_penalty)
+
 # Criterion and Optimizer
-lr_map = {'1D-CNN': 0.001, 'RNN': 0.001, 'LSTM': 0.0005, 'Transformer': 0.0005}
+lr_map = {'1D-CNN': 0.001, 'RNN': 0.001, 'LSTM': 0.0005, 'Transformer': 0.0005, 'PatchTST': 0.0005}
 learning_rate = lr_map[model_name]
 
-criterion = nn.MSELoss()
+criterion = DirectionalMSELoss(alpha=0.15)
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
 # Learning Rate Scheduler
@@ -335,6 +434,11 @@ for epoch in range(1, EPOCHS + 1):
 # Load best weights
 if best_model_weights is not None:
     model.load_state_dict(best_model_weights)
+    
+    # Save the model for live inference
+    model_save_path = os.path.join(PROJECT_DIR, 'models', f'{model_name}.pth')
+    torch.save(model.state_dict(), model_save_path)
+    print(f"  Saved best PyTorch weights to: {model_save_path}")
 
 # ==========================================
 # 4. EVALUATION & PRICE RECONSTRUCTION
