@@ -640,85 +640,84 @@ if 'sim_results' in st.session_state and st.session_state['sim_results'] is not 
     else:
         model_label = saved_model
 
-        st.markdown(
-            f'<div class="cc-section-title">{strategy_opt} Results · '
-            f'{model_label} (Out-Of-Sample Data)</div>',
-            unsafe_allow_html=True,
+    st.markdown(
+        f'<div class="cc-section-title">{saved_strategy} Results · '
+        f'{model_label} (Out-Of-Sample Data)</div>',
+        unsafe_allow_html=True,
+    )
+    
+    ai_roi = ((results['final_val'] - 10000) / 10000) * 100
+    bh_roi = ((results['buy_hold_val'] - 10000) / 10000) * 100
+    
+    ai_color = "negative" if ai_roi < 0 else ""
+    
+    m1, m2, m3, m4 = st.columns(4)
+    m1.markdown(f'<div class="metric-card"><div class="metric-value {ai_color}">${results["final_val"]:,.2f}</div><div class="metric-label">{saved_strategy} Value</div></div>', unsafe_allow_html=True)
+    m2.markdown(f'<div class="metric-card"><div class="metric-value {ai_color}">{ai_roi:+.2f}%</div><div class="metric-label">{saved_strategy} ROI</div></div>', unsafe_allow_html=True)
+    m3.markdown(f'<div class="metric-card"><div class="metric-value">{results["trades_executed"]}</div><div class="metric-label">Total Trades Executed</div></div>', unsafe_allow_html=True)
+    m4.markdown(f'<div class="metric-card"><div class="metric-value">{results["win_rate"]:.1f}%</div><div class="metric-label">Signal Win Rate</div></div>', unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=results['dates'], y=results['equity_curve'], 
+        mode='lines', name=f'{model_label} {saved_strategy}', 
+        line=dict(color='#4ade80', width=2)
+    ))
+    fig.add_trace(go.Scatter(
+        x=results['dates'], y=results['buy_hold_curve'], 
+        mode='lines', name='Buy and Hold Benchmark', 
+        line=dict(color='#828b97', width=1.5, dash='dot')
+    ))
+    
+    fig.update_layout(
+        template='plotly_dark',
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        title=dict(text="Portfolio Equity Curve ($10,000 Initial Capital)", font=dict(color="#e6edf3")),
+        xaxis_title="Date",
+        yaxis_title="Portfolio Value (USD)",
+        yaxis=dict(tickformat="$,"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    
+    if ai_roi > bh_roi:
+        st.success(
+            f"**Alpha Generated!** The {model_label} {saved_strategy} "
+            f"strategy outperformed the market benchmark by "
+            f"**{ai_roi - bh_roi:+.2f}%** in the unseen period."
+        )
+    else:
+        tip = (
+            "Try adjusting the Z-Score Threshold or Lookback Window."
+            if saved_strategy == "Mean Reversion"
+            else "Try adjusting the Trade Threshold to filter out noise."
+        )
+        st.warning(
+            f"The {model_label} {saved_strategy} strategy underperformed "
+            f"the benchmark. {tip}"
         )
         
-        ai_roi = ((results['final_val'] - 10000) / 10000) * 100
-        bh_roi = ((results['buy_hold_val'] - 10000) / 10000) * 100
-        
-        ai_color = "negative" if ai_roi < 0 else ""
-        
-        m1, m2, m3, m4 = st.columns(4)
-        m1.markdown(f'<div class="metric-card"><div class="metric-value {ai_color}">${results["final_val"]:,.2f}</div><div class="metric-label">{strategy_opt} Value</div></div>', unsafe_allow_html=True)
-        m2.markdown(f'<div class="metric-card"><div class="metric-value {ai_color}">{ai_roi:+.2f}%</div><div class="metric-label">{strategy_opt} ROI</div></div>', unsafe_allow_html=True)
-        m3.markdown(f'<div class="metric-card"><div class="metric-value">{results["trades_executed"]}</div><div class="metric-label">Total Trades Executed</div></div>', unsafe_allow_html=True)
-        m4.markdown(f'<div class="metric-card"><div class="metric-value">{results["win_rate"]:.1f}%</div><div class="metric-label">Signal Win Rate</div></div>', unsafe_allow_html=True)
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=results['dates'], y=results['equity_curve'], 
-            mode='lines', name=f'{model_label} {strategy_opt}', 
-            line=dict(color='#4ade80', width=2)
-        ))
-        fig.add_trace(go.Scatter(
-            x=results['dates'], y=results['buy_hold_curve'], 
-            mode='lines', name='Buy and Hold Benchmark', 
-            line=dict(color='#828b97', width=1.5, dash='dot')
-        ))
-        
-        fig.update_layout(
-            template='plotly_dark',
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            title=dict(text="Portfolio Equity Curve ($10,000 Initial Capital)", font=dict(color="#e6edf3")),
-            xaxis_title="Date",
-            yaxis_title="Portfolio Value (USD)",
-            yaxis=dict(tickformat="$,"),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-        )
-        st.plotly_chart(fig, use_container_width=True)
-        
-        if ai_roi > bh_roi:
-            st.success(
-                f"**Alpha Generated!** The {model_label} {saved_strategy} "
-                f"strategy outperformed the market benchmark by "
-                f"**{ai_roi - bh_roi:+.2f}%** in the unseen period."
-            )
+    # --- AI Insights for Trading Simulation ---
+    st.markdown("---")
+    api_key = get_groq_api_key()
+    
+    if st.button("🤖 Explain Strategy Performance", use_container_width=True):
+        if not api_key:
+            st.warning("Please configure your Groq API Key in the sidebar to use AI Insights.")
         else:
-            tip = (
-                "Try adjusting the Z-Score Threshold or Lookback Window."
-                if saved_strategy == "Mean Reversion"
-                else "Try adjusting the Trade Threshold to filter out noise."
-            )
-            st.warning(
-                f"The {model_label} {saved_strategy} strategy underperformed "
-                f"the benchmark. {tip}"
-            )
-            
-        # --- AI Insights for Trading Simulation ---
-        st.markdown("---")
-        api_key = get_groq_api_key()
-        
-        if st.button("🤖 Explain Strategy Performance", use_container_width=True):
-            if not api_key:
-                st.warning("Please configure your Groq API Key in the sidebar to use AI Insights.")
-            else:
-                with st.spinner("Analyzing simulation results with Groq..."):
-                    # Add strategy metadata to results for the LLM
-                    sim_results_for_llm = results.copy()
-                    sim_results_for_llm['strategy_name'] = saved_strategy
-                    sim_results_for_llm['models'] = model_label
-                    
-                    insight = generate_trading_insight(sim_results_for_llm, api_key)
-                    st.markdown(
-                        f'<div style="background:#1e293b; border:1px solid #334155; border-left:4px solid #10b981; '
-                        f'border-radius:8px; padding:16px; margin-top:16px;">'
-                        f'{insight}</div>',
-                        unsafe_allow_html=True
-                    )
+            with st.spinner("Analyzing simulation results with Groq..."):
+                sim_results_for_llm = results.copy()
+                sim_results_for_llm['strategy_name'] = saved_strategy
+                sim_results_for_llm['models'] = model_label
+                
+                insight = generate_trading_insight(sim_results_for_llm, api_key)
+                st.markdown(
+                    f'<div style="background:#1e293b; border:1px solid #334155; border-left:4px solid #10b981; '
+                    f'border-radius:8px; padding:16px; margin-top:16px;">'
+                    f'{insight}</div>',
+                    unsafe_allow_html=True
+                )
 
