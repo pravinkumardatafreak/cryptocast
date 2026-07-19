@@ -1,9 +1,9 @@
 """
-CryptoCast - Step 2: Train 4 PyTorch models with multi-output heads
+CryptoCast - Step 2: Train 5 PyTorch models with multi-output heads
 =======================================================================
-Trains 1D-CNN, RNN, LSTM, and Transformer models, each outputting log-return
-predictions for 1D, 3D, and 7D horizons simultaneously in a single forward pass.
-Compiles all metrics into CSV and JSON summary deliverables.
+Trains 1D-CNN, RNN, LSTM, Transformer, and PatchTST models, each outputting
+log-return predictions for 1D, 3D, and 7D horizons simultaneously in a single
+forward pass. Compiles all metrics into CSV and JSON summary deliverables.
 
 Usage:
     python src/step2_train_pytorch.py
@@ -20,7 +20,7 @@ RESULTS_DIR = os.path.join(PROJECT_DIR, 'results')
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 HORIZON_NAMES = ['1D', '3D', '7D']
-MODELS = ['1D-CNN', 'RNN', 'LSTM', 'Transformer']
+MODELS = ['1D-CNN', 'RNN', 'LSTM', 'Transformer', 'PatchTST']
 
 # ── Training Loop ─────────────────────────────────────────────
 print("==============================================================")

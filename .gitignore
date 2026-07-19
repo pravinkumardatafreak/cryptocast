@@ -19,6 +19,9 @@ scalers.pkl
 # Model artifacts (regenerable)
 results/*.json
 
+# Runtime logs (regenerable, grows with every demo run)
+data/live_predictions_log.csv
+
 # OS files
 .DS_Store
 Thumbs.db

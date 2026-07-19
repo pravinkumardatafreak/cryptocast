@@ -24,9 +24,9 @@ plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 plt.rcParams['figure.dpi'] = 150
 
-model_names = ['1D-CNN', 'RNN', 'LSTM', 'Transformer']
+model_names = ['1D-CNN', 'RNN', 'LSTM', 'Transformer', 'PatchTST']
 horizon_names = ['1D', '3D', '7D']
-model_colors = {'1D-CNN': '#3498db', 'RNN': '#e74c3c', 'LSTM': '#2ecc71', 'Transformer': '#9b59b6'}
+model_colors = {'1D-CNN': '#3498db', 'RNN': '#e74c3c', 'LSTM': '#2ecc71', 'Transformer': '#9b59b6', 'PatchTST': '#f39c12'}
 
 # ── Load results ──────────────────────────────────────────────
 all_results = {}
@@ -76,8 +76,11 @@ print("\nGenerating visualizations...")
 
 # 09 - Loss Curves
 for horizon_name in horizon_names:
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
     axes = axes.flatten()
+    if len(axes) > len(model_names):
+        for j in range(len(model_names), len(axes)):
+            axes[j].set_visible(False)
     for idx, model_name in enumerate(model_names):
         hist = all_histories[horizon_name][model_name]
         ax = axes[idx]
@@ -94,8 +97,11 @@ print("  Loss curves saved")
 
 # 10 - Actual vs Predicted
 for horizon_name in horizon_names:
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig, axes = plt.subplots(2, 3, figsize=(20, 12))
     axes = axes.flatten()
+    if len(axes) > len(model_names):
+        for j in range(len(model_names), len(axes)):
+            axes[j].set_visible(False)
     for idx, model_name in enumerate(model_names):
         preds = all_predictions[horizon_name][model_name]
         ax = axes[idx]
@@ -112,8 +118,11 @@ print("  Actual vs Predicted plots saved")
 
 # 11 - Error Distribution
 for horizon_name in horizon_names:
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
     axes = axes.flatten()
+    if len(axes) > len(model_names):
+        for j in range(len(model_names), len(axes)):
+            axes[j].set_visible(False)
     for idx, model_name in enumerate(model_names):
         preds = all_predictions[horizon_name][model_name]
         errors = np.array(preds['y_pred']) - np.array(preds['y_test'])

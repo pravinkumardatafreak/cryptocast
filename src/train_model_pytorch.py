@@ -2,8 +2,8 @@
 CryptoCast - Train a multi-output model for all horizons using PyTorch
 ===================================================================
 A clean, modular, and PEP-8 compliant PyTorch script that implements
-1D-CNN, RNN, LSTM, and Transformer architectures to forecast 1D, 3D, 
-and 7D horizons simultaneously using stationary log returns.
+1D-CNN, RNN, LSTM, Transformer, and PatchTST architectures to forecast
+1D, 3D, and 7D horizons simultaneously using stationary log returns.
 
 Usage:
     python src/train_model_pytorch.py <model_name>

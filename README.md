@@ -1,13 +1,14 @@
 # CryptoCast: Multi-Horizon Bitcoin Price Forecasting Using Deep Learning
 
-A capstone project comparing **1D-CNN**, **RNN**, **LSTM**, and **Transformer** deep learning
-architectures for Bitcoin price forecasting across three horizons — 1-day, 3-day, and 7-day ahead.
+A capstone project comparing **1D-CNN**, **RNN**, **LSTM**, **Transformer**, and **PatchTST**
+deep learning architectures for Bitcoin price forecasting across three horizons — 1-day, 3-day,
+and 7-day ahead.
 
 ## Project Summary
 
 | Aspect | Details |
 |---|---|
-| **Models** | 1D-CNN, RNN, LSTM, Transformer (PyTorch) |
+| **Models** | 1D-CNN, RNN, LSTM, Transformer, PatchTST (PyTorch) |
 | **Forecast Horizons** | 1D, 3D, 7D (multi-output, single model per architecture) |
 | **Target Variable** | Log return: `r = ln(P[t+h] / P[t])` — stationary, scale-invariant |
 | **Features** | 9: OHLCV + Change% + Block_Reward + Days_Since_Halving + Halving_Progress |
@@ -18,9 +19,14 @@ architectures for Bitcoin price forecasting across three horizons — 1-day, 3-d
 
 | Horizon | Best Model | MAE (USD) | RMSE (USD) | MAPE (%) | R² Score |
 |---|---|---|---|---|---|
-| **1D** | LSTM | $753.74 | $1,169.24 | **2.12%** | **0.9917** |
-| **3D** | LSTM | $1,514.05 | $2,191.28 | **4.20%** | **0.9711** |
-| **7D** | Transformer | $2,127.22 | $3,060.78 | **6.04%** | **0.9448** |
+| **1D** | PatchTST | $732.23 | $1,138.47 | **2.06%** | **0.9921** |
+| **3D** | PatchTST | $1,347.56 | $1,962.13 | **3.85%** | **0.9768** |
+| **7D** | PatchTST | $2,097.01 | $3,067.21 | **5.93%** | **0.9446** |
+
+PatchTST — a state-of-the-art patch-based time series Transformer with reversible instance
+normalization (RevIN) — outperforms all four baseline architectures at every horizon. See the
+full leaderboard in [`model_comparison_results.csv`](model_comparison_results.csv) for all five
+models across all three horizons.
 
 > [!NOTE]
 > **The R² Paradox & Fractal Returns:** The $R^2$ scores shown above evaluate predicted vs actual *absolute price levels*. The near-1.0 scores are a path-dependent time-series artifact (yesterday's price is highly predictive of today's price level). In contrast, daily log returns behave like a fractal random walk (Hurst exponent $H \approx 0.53$). Predicting daily returns directly yields return-level $R^2$ scores of $1\% - 3\%$. In quantitative finance, explaining $2\%$ of return-level variance is considered highly successful due to the fractal, noise-dominated nature of markets.
@@ -29,7 +35,7 @@ architectures for Bitcoin price forecasting across three horizons — 1-day, 3-d
 
 ## 📈 Feature Space Evolution (Ablation Study)
 
-To improve forecasting robustness, we evolved our input features from reactive price-based technical indicators to protocol-level variables derived directly from Satoshi Nakamoto's whitepaper design:
+To improve forecasting robustness, we evolved our input features from reactive price-based technical indicators to protocol-level variables derived directly from Satoshi Nakamoto's whitepaper design. This ablation was run across the original four architectures (1D-CNN, RNN, LSTM, Transformer), prior to PatchTST being added:
 
 * **Version 1 (Price-Based Indicators):** `[OHLCV, Change %, SMA_7, SMA_30, RSI_14, Vol_30]`
 * **Version 2 (Whitepaper Protocol Features):** `[OHLCV, Change %, Block_Reward, Days_Since_Halving, Halving_Progress]`
@@ -63,25 +69,37 @@ During evaluation, be prepared to discuss these three structural bottlenecks in 
 ```
 cryptocast/
 ├── cryptocast.py                    # Main entry point — runs full pipeline
-├── app.py                           # Streamlit dashboard (6 tabs)
+├── app.py                           # Streamlit dashboard entry point (10 pages)
 ├── requirements.txt                 # Python dependencies
 ├── .gitignore
 ├── meta.json                        # Dataset metadata (shape, date range)
-├── model_comparison_results.csv     # Compiled metrics table
-├── results.json                     # Results in JSON format
+├── model_comparison_results.csv     # Compiled metrics table (all 5 models)
+├── results.json                     # Results in JSON format (all 5 models)
+├── wfv_results.json                 # Walk-forward validation results
 │
 ├── data/
 │   └── btc_data.csv                 # Cleaned BTC daily price data
 │
 ├── src/
 │   ├── step1_eda.py                 # Data loading, cleaning, EDA, preprocessing
-│   ├── step2_train_pytorch.py       # Orchestrates training of all 4 models
+│   ├── step2_train_pytorch.py       # Orchestrates training of all models
 │   ├── step3_viz.py                 # Generates comparison visualizations
-│   └── train_model_pytorch.py       # Single-model PyTorch trainer (called by step2)
+│   ├── step4_wfv.py                 # Walk-forward validation (backtesting)
+│   ├── train_model_pytorch.py       # Single-model PyTorch trainer (called by step2)
+│   ├── llm_insights.py              # Groq LLM integration for AI-generated insights
+│   └── streamlit_utils.py           # Shared dashboard styling helpers
 │
-├── results/                         # Per-model JSON results (gitignored)
-│   ├── 1D-CNN_1D.json
-│   └── ...
+├── pages/                           # 10 Streamlit dashboard pages (see below)
+│
+├── models/                          # Saved weights for live inference
+│   ├── LSTM.pth
+│   ├── Transformer.pth
+│   └── PatchTST.pth                 # Note: 1D-CNN and RNN weights are not
+│                                     # checked in — retrain via step2 to
+│                                     # regenerate them for live inference
+│
+├── results/                         # Per-model JSON results (gitignored,
+│                                     # regenerate by running the full pipeline)
 │
 └── visualizations/
     ├── 01_price_time_series.png
@@ -128,7 +146,7 @@ bun run pipeline
 
 This runs all three steps in sequence:
 - **Step 1** — Load, clean, compute technical indicators, scale data
-- **Step 2** — Train all 4 models (1D-CNN, RNN, LSTM, Transformer)
+- **Step 2** — Train the models (1D-CNN, RNN, LSTM, Transformer, PatchTST)
 - **Step 3** — Generate comparison visualizations
 
 ### 5. Launch the Dashboard
@@ -148,38 +166,53 @@ Opens at `http://localhost:8502`. The `bun run dev` script automatically passes 
 | `bun run eda` | Run EDA & feature engineering step |
 | `bun run wfv` | Run Walk-Forward Validation only |
 
-> **Note:** Bun 1.3.14 is installed at `C:\Users\pravi\.bun\bin\bun.exe`. Restart your terminal after first install for `bun` to be available globally.
+> **Note:** Requires [Bun](https://bun.sh) (tested on 1.3.14). Install it, then restart your terminal so `bun` is available globally.
 
 - **Overview (Landing Page)** — Project summary, model descriptions, and business scope
 - **1. Exploratory Analysis** — Historical price trend + Outlier Box Plot + Interactive Return Distribution Zoom
 - **2. Seasonality Analysis** — Intra-month time period return heatmap (Q1–Q4) + win rate stats
-- **3. Model Performance** — Metric comparison leaderboard and dynamic bar charts
+- **3. Model Performance** — Metric comparison leaderboard and dynamic bar charts across all 5 models
 - **4. Backtest (WFV)** — 3-Fold Walk-Forward validation stats and model stability checks
 - **5. Diagnostics** — Actual vs. predicted diagnostic selectors + loss curves
 - **6. Macro & Halving Dynamics** — Liquidity rotation, halving schedule, and Satoshi whitepaper link
+- **7. Live Prediction** — Real-time BTC data pulled from Yahoo Finance, run through a live PyTorch forward pass (LSTM, Transformer, or PatchTST)
+- **8. Forward Testing** — True out-of-sample evaluation on unseen market data from March 2024 to present
+- **9. Explainable AI** — SHAP-based explainability showing which features drive each prediction
+- **10. Trading Simulator** — Translates model accuracy into a simulated trading strategy and business ROI
 
 ## Model Architectures (PyTorch)
 
-All models share a **multi-output design**: one shared encoder body + three parallel
-output heads predicting 1D, 3D, and 7D log returns simultaneously.
+All models share a **multi-output design**: one shared encoder body + a single head
+producing 1D, 3D, and 7D log return predictions simultaneously (`Linear(..., 3)`).
 
 ### 1D-CNN
-- Conv1D(64, kernel=3) → ReLU → MaxPool → Conv1D(128, kernel=3) → ReLU → MaxPool
-- Flatten → Linear(64) → Three output heads
-- Best for short-term local pattern detection
+- 3 causally-padded Conv1D blocks: `Conv1D(64) → Conv1D(64) → Conv1D(32)`, each ReLU-activated
+- Global average pooling (`AdaptiveAvgPool1d`) over the time axis
+- `Linear(32→64) → ReLU → Dropout → Linear(64→3)`
+- Fastest to train; captures short-term local patterns but weakest of the five architectures at every horizon
 
 ### RNN
-- SimpleRNN(64) → SimpleRNN(32) → Linear(16) → Three output heads
-- Baseline recurrent model — best performer at 1D and 3D horizons
+- 2 stacked `SimpleRNN` layers: `RNN(64) → RNN(32)`, taking the last timestep's hidden state
+- `Linear(32→32) → ReLU → Linear(32→3)`
+- Simple baseline — surprisingly the strongest of the original four architectures at the 7D horizon
 
 ### LSTM
-- LSTM(64) → LSTM(32) → Linear(16) → Three output heads
-- Gated memory cells reduce vanishing gradient problem
+- 3 stacked LSTM layers: `LSTM(128) → LSTM(64) → LSTM(32)`, taking the last timestep's hidden state
+- `Linear(32→64) → ReLU → Linear(64→3)`
+- Gated memory cells reduce the vanishing-gradient problem — the strongest of the original four architectures at 1D and 3D
 
 ### Transformer
-- MultiheadAttention(4 heads, d_model=64) + FeedForward(128) × 2 blocks
-- Global pooling → Linear(32) → Three output heads
-- Best performer at 7D horizon (global context via self-attention)
+- Linear input projection to `d_model=256` (4 heads × 64 head-size)
+- 2-layer `TransformerEncoder` (4 attention heads, feedforward dim 128)
+- Global average pooling → `Linear(256→64) → ReLU → Linear(64→3)`
+- Captures long-range dependencies via self-attention, though it doesn't lead at any single horizon among the original four
+
+### PatchTST
+- Reversible Instance Normalization (RevIN) applied per-sample before encoding, and inverted after
+- Sequence split into 5 non-overlapping patches (patch length 12, stride 12) instead of point-wise tokens
+- 3-layer `TransformerEncoder` over patch embeddings (4 heads, feedforward dim 256, GELU activation)
+- `Flatten → Linear(640→64) → ReLU → Dropout → Linear(64→3)`
+- **Best model overall** — beats every other architecture at all three horizons (see results table above)
 
 ## Training Configuration
 

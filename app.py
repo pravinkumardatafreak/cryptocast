@@ -89,13 +89,16 @@ with a1:
     callout("RNN",
         "<p>Baseline sequential model. Efficient, but limited by vanishing gradients over "
         "long sequences. Fast performer on the 1D and 3D horizons.</p>")
+    callout("PatchTST",
+        "<p>State-of-the-art Patch Time Series Transformer with RevIN. "
+        "Best performer across all horizons (1D, 3D, and 7D).</p>")
 with a2:
     callout("LSTM",
         "<p>Gated memory cells retain long-range dependencies, reducing the vanishing gradient "
-        "problem seen in vanilla RNNs. Best performer on 1D and 3D horizons.</p>")
+        "problem seen in vanilla RNNs. Strong performer on 1D and 3D horizons.</p>")
     callout("Transformer",
         "<p>Self-attention captures global context across the full 60-day sequence. "
-        "Best performer on the 7D horizon.</p>")
+        "Strong performer on the 7D horizon.</p>")
 
 st.markdown('<div class="cc-section-title">Business Relevance</div>', unsafe_allow_html=True)
 st.markdown(
