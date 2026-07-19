@@ -2,7 +2,7 @@
 CryptoCast: Multi-Horizon Bitcoin Price Forecasting Using Deep Learning (PyTorch)
 ==================================================================================
 Main entry point running the complete end-to-end pipeline using the PyTorch backend:
-  Step 1: Data loading, cleaning, EDA, and preprocessing (10 features, leak-free scaling)
+  Step 1: Data loading, cleaning, EDA, and preprocessing (9 features, leak-free scaling)
   Step 2: Train 5 models (1D-CNN, RNN, LSTM, Transformer, PatchTST) each predicting 1D, 3D, 7D
           horizons simultaneously via multi-output architecture
   Step 3: Generate comparison visualizations from results

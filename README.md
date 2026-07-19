@@ -19,14 +19,14 @@ and 7-day ahead.
 
 | Horizon | Best Model | MAE (USD) | RMSE (USD) | MAPE (%) | R² Score |
 |---|---|---|---|---|---|
-| **1D** | PatchTST | $732.23 | $1,138.47 | **2.06%** | **0.9921** |
+| **1D** | LSTM | $730.98 | $1,136.38 | **2.06%** | **0.9921** |
 | **3D** | PatchTST | $1,347.56 | $1,962.13 | **3.85%** | **0.9768** |
 | **7D** | PatchTST | $2,097.01 | $3,067.21 | **5.93%** | **0.9446** |
 
 PatchTST — a state-of-the-art patch-based time series Transformer with reversible instance
-normalization (RevIN) — outperforms all four baseline architectures at every horizon. See the
-full leaderboard in [`model_comparison_results.csv`](model_comparison_results.csv) for all five
-models across all three horizons.
+normalization (RevIN) — outperforms the baseline architectures at the longer 3-day and 7-day horizons,
+while LSTM holds a very slight edge at the 1-day horizon. See the full leaderboard in
+[`model_comparison_results.csv`](model_comparison_results.csv) for all five models across all three horizons.
 
 > [!NOTE]
 > **The R² Paradox & Fractal Returns:** The $R^2$ scores shown above evaluate predicted vs actual *absolute price levels*. The near-1.0 scores are a path-dependent time-series artifact (yesterday's price is highly predictive of today's price level). In contrast, daily log returns behave like a fractal random walk (Hurst exponent $H \approx 0.53$). Predicting daily returns directly yields return-level $R^2$ scores of $1\% - 3\%$. In quantitative finance, explaining $2\%$ of return-level variance is considered highly successful due to the fractal, noise-dominated nature of markets.
@@ -78,7 +78,8 @@ cryptocast/
 ├── wfv_results.json                 # Walk-forward validation results
 │
 ├── data/
-│   └── btc_data.csv                 # Cleaned BTC daily price data
+│   ├── btc_data.csv                 # Cleaned BTC daily price data
+│   └── live_predictions_log.csv     # Dynamic prediction logs (automatically generated during live inference runs)
 │
 ├── src/
 │   ├── step1_eda.py                 # Data loading, cleaning, EDA, preprocessing
