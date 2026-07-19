@@ -59,7 +59,7 @@ callout(
 if df_wfv is not None:
     NUM_FOLDS = 2  # Halving-aligned: 2 complete epochs
     col_w1, col_w2 = st.columns(2)
-    selected_model = col_w1.selectbox("Select Model for WFV Analysis", ["RNN", "1D-CNN", "LSTM", "Transformer"])
+    selected_model = col_w1.selectbox("Select Model for WFV Analysis", ["RNN", "1D-CNN", "LSTM", "Transformer", "PatchTST"])
     selected_horizon = col_w2.selectbox("Select Horizon for WFV Analysis", ["1D", "3D", "7D"])
 
     FOLD_LABELS = [
@@ -121,7 +121,7 @@ if df_wfv is not None:
     # Compare all models' average MAPEs across all folds
     st.markdown('<div class="cc-section-title">Model Stability Comparison (Average MAPE across Folds)</div>', unsafe_allow_html=True)
     comparison_rows = []
-    for mdl in ["RNN", "1D-CNN", "LSTM", "Transformer"]:
+    for mdl in ["RNN", "1D-CNN", "LSTM", "Transformer", "PatchTST"]:
         for hz in ["1D", "3D", "7D"]:
             if mdl in df_wfv:
                 num_folds = len(df_wfv[mdl])

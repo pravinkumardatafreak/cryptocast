@@ -28,7 +28,7 @@ st.markdown('<div class="cc-subtitle">Inspect loss curves and check exact actual
 
 d1, d2 = st.columns(2)
 horz = d1.selectbox("Horizon", ["1D", "3D", "7D"])
-mdl  = d2.selectbox("Model",   ["1D-CNN", "RNN", "LSTM", "Transformer"])
+mdl  = d2.selectbox("Model",   ["1D-CNN", "RNN", "LSTM", "Transformer", "PatchTST"])
 
 json_path = os.path.join(RESULTS_DIR, f"{mdl}_{horz}.json")
 if os.path.exists(json_path):
