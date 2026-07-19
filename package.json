@@ -1,7 +1,7 @@
 {
   "name": "cryptocast",
   "version": "1.0.0",
-  "description": "Multi-Horizon Bitcoin Price Forecasting Dashboard using Deep Learning (1D-CNN, RNN, LSTM, Transformer)",
+  "description": "Multi-Horizon Bitcoin Price Forecasting Dashboard using Deep Learning (1D-CNN, RNN, LSTM, Transformer, PatchTST)",
   "main": "app.py",
   "type": "module",
   "scripts": {
