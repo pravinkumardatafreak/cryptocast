@@ -229,7 +229,12 @@ def main():
         raise FileNotFoundError(f"Cleaned dataset not found at {DATA_PATH}. Run step1_eda.py first.")
         
     data = pd.read_csv(DATA_PATH, index_col='Date', parse_dates=True)
-    features = ['Price', 'Open', 'High', 'Low', 'Vol.', 'Change %', 'Block_Reward', 'Days_Since_Halving', 'Halving_Progress']
+    features = [
+        'Price', 'Open', 'High', 'Low', 'Vol.', 'Change %',
+        'Day_Sin', 'Day_Cos', 'Stage_Sin', 'Stage_Cos',
+        'Quarter_Sin', 'Quarter_Cos', 'LeapCycle_Sin', 'LeapCycle_Cos',
+        'Days_Since_Halving', 'Halving_Progress'
+    ]
     raw_prices = data['Price'].values
     
     M = len(data) - SEQ_LENGTH - 7 + 1  # total number of sequence samples

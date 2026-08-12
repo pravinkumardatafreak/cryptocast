@@ -56,7 +56,69 @@ if df_raw is not None:
     )
     st.plotly_chart(fig_price, use_container_width=True)
 
-    with st.expander("View recent raw data"):
+    # 🗄️ SQL & Data Warehouse Query Studio (Snowflake / SQLite)
+    st.markdown('<div class="cc-section-title">🗄️ SQL Data Query Studio (Snowflake / SQLite Pipeline)</div>', unsafe_allow_html=True)
+    st.caption("Execute production SQL queries directly against the historical Bitcoin time-series dataset.")
+
+    import sqlite3
+    conn = sqlite3.connect(":memory:")
+    df_raw_reset = df_raw.reset_index()
+    df_raw_reset.to_sql("btc_market_data", conn, index=False, if_exists="replace")
+
+    col_sql1, col_sql2 = st.columns([1, 2])
+
+    with col_sql1:
+        sql_preset = st.selectbox(
+            "Select Preset Production SQL Query:",
+            [
+                "Annual Price & Volatility Aggregates",
+                "Top 10 Outlier Price Volatility Shocks (>10%)",
+                "Quarterly Moving Average & Volume Summary"
+            ]
+        )
+        
+        if sql_preset == "Annual Price & Volatility Aggregates":
+            default_query = """SELECT 
+    strftime('%Y', Date) AS Year,
+    COUNT(*) AS Trading_Days,
+    ROUND(AVG(Price), 2) AS Avg_Price_USD,
+    ROUND(MAX(Price), 2) AS Peak_Price_USD,
+    ROUND(MIN(Price), 2) AS Floor_Price_USD
+FROM btc_market_data
+GROUP BY Year
+ORDER BY Year DESC;"""
+        elif sql_preset == "Top 10 Outlier Price Volatility Shocks (>10%)":
+            default_query = """SELECT 
+    Date,
+    ROUND(Price, 2) AS Close_Price,
+    "Change %" AS Percent_Change
+FROM btc_market_data
+WHERE ABS("Change %") > 10.0
+ORDER BY ABS("Change %") DESC
+LIMIT 10;"""
+        else:
+            default_query = """SELECT 
+    strftime('%Y-Q', Date) || ((CAST(strftime('%m', Date) AS INTEGER) - 1) / 3 + 1) AS Quarter,
+    ROUND(AVG(Price), 2) AS Avg_Quarterly_Price,
+    ROUND(SUM("Vol."), 2) AS Total_Volume
+FROM btc_market_data
+GROUP BY Quarter
+ORDER BY Quarter DESC
+LIMIT 12;"""
+
+        sql_query_input = st.text_area("SQL Query Editor", value=default_query, height=180)
+
+    with col_sql2:
+        try:
+            sql_res = pd.read_sql_query(sql_query_input, conn)
+            st.markdown(f"**Query Results ({len(sql_res)} records returned):**")
+            st.dataframe(sql_res, use_container_width=True, hide_index=True)
+        except Exception as err:
+            st.error(f"SQL Execution Error: {err}")
+
+    conn.close()
+
+    with st.expander("View raw dataset schema"):
         st.dataframe(df_raw.tail(50), use_container_width=True)
 
     # ⚠️ Outlier Risk Section

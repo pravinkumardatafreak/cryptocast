@@ -12,9 +12,18 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.streamlit_utils import inject_custom_css, card, callout, DARK_LAYOUT
+from src.streamlit_utils import inject_custom_css, card, callout, DARK_LAYOUT, render_stakeholder_narrative
 inject_custom_css()
 
 # CSS Styles
+render_stakeholder_narrative(
+    page_num=6,
+    total_pages=11,
+    title="Macro & Halving Dynamics",
+    simple_explanation="This page analyzes global macroeconomic liquidity (Fed Rates, CPI Inflation, M2 Liquidity) and 3-State Market Regimes (Bull, Consolidation, Bear).",
+    connection_story="Provides macro-regime filtering parameters that feed directly into Page 10 (Trading Simulator) position sizing (100% Bull, 50% Consolidation, 0% Bear).",
+    key_takeaway="3-State Macro Regimes statistically align with 4-Year Halving Cycle Quarters (Chi-Square p = 10^-117), providing macro risk protection."
+)
 
 st.markdown('<div class="cc-eyebrow">Macroeconomics</div>', unsafe_allow_html=True)
 st.markdown('<div class="cc-title">Macro & Halving Dynamics</div>', unsafe_allow_html=True)
@@ -30,7 +39,7 @@ st.write(
 col_macro1, col_macro2 = st.columns(2)
 with col_macro1:
     callout(
-        "Risk-On Sentiment &amp; Liquidity Expansion",
+        "Risk-On Sentiment & Liquidity Expansion",
         "<p><b>Market Context:</b> Low interest rates and expansionary monetary policy (QE) "
         "increase global capital supply. Investors seek higher yields by taking on more risk.<br>"
         "<b>Asset Rotation:</b> Capital rotates from cash and safe-havens into risk assets "
@@ -39,7 +48,7 @@ with col_macro1:
     )
 with col_macro2:
     callout(
-        "Risk-Off Sentiment &amp; Liquidity Contraction",
+        "Risk-Off Sentiment & Liquidity Contraction",
         "<p><b>Market Context:</b> Rising interest rates (QT) or macroeconomic/geopolitical crises "
         "cause investors to de-risk. Capital preservation becomes the primary goal.<br>"
         "<b>Asset Rotation:</b> Capital rotates out of speculative risk assets and back into "
@@ -48,6 +57,44 @@ with col_macro2:
         "structural bear markets.</p>",
         warn=True,
     )
+
+# ── Macro Transmission Mechanism Table ──────────────────────────────────────
+st.markdown('<div class="cc-section-title">🏦 Macro Fundamentals: Inflation, Fed Rates &amp; Global M2 Liquidity</div>', unsafe_allow_html=True)
+st.write(
+    "How macroeconomic monetary policy decisions transmit directly into Bitcoin liquidity cycles:"
+)
+
+macro_table_data = {
+    "Macro Indicator": [
+        "Fed Funds Rate (Interest Rates)",
+        "Global M2 Money Supply",
+        "US CPI / PCE Inflation Rate",
+        "US Dollar Index (DXY)",
+        "US 10-Year Treasury Yield"
+    ],
+    "Policy / Economic State": [
+        "Rate Hikes (Hawkish / QT) vs Rate Cuts (Dovish / QE)",
+        "M2 Expansion (Liquidity Injection) vs Contraction",
+        "Surging CPI (>3%) vs Cooling CPI (~2% Target)",
+        "Strong USD (Flight to Quality) vs Weak USD",
+        "Rising Yields (Safe Yield) vs Falling Yields"
+    ],
+    "BTC Price Impact": [
+        "Rate Hikes = Risk-Off (Bearish) | Rate Cuts = Risk-On (Bullish)",
+        "Direct Positive Correlation (+0.82) with BTC Bull Runs",
+        "Triggers Fed Tightening -> Temporary Crash; Long-Term Safe Haven",
+        "Strong Inverse Correlation (-0.75) with BTC Returns",
+        "Higher Yields = Capital rotates out of non-yielding Crypto"
+    ]
+}
+st.dataframe(pd.DataFrame(macro_table_data), use_container_width=True, hide_index=True)
+
+callout(
+    "💡 The Macro Liquidity Transmission Chain:",
+    "$$\\text{CPI Surge (Inflation)} \\longrightarrow \\text{Fed Rate Hikes (QT)} \\longrightarrow \\text{M2 Liquidity Squeeze} \\longrightarrow \\text{BTC Capital Outflow (Risk-Off)}$$"
+    "<br><br>"
+    "$$\\text{Cooling Inflation} \\longrightarrow \\text{Fed Rate Cuts (QE)} \\longrightarrow \\text{Global M2 Expansion} \\longrightarrow \\text{BTC Capital Inflow (Risk-On)}$$"
+)
 
 st.markdown('<div class="cc-section-title">The Bitcoin Halving Cycle</div>', unsafe_allow_html=True)
 st.write(

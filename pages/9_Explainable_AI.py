@@ -185,8 +185,36 @@ def prepare_shap_data():
     df['Days_Since_Halving'] = days_since
     df['Halving_Progress'] = progress
     
+    # Tier 1: Cyclical Day-of-Week Encoding (Daily Resolution, T=7)
+    day_of_week = df.index.dayofweek
+    df['Day_Sin'] = np.sin(2 * np.pi * day_of_week / 7.0)
+    df['Day_Cos'] = np.cos(2 * np.pi * day_of_week / 7.0)
+    
+    # Tier 2: Intra-Month Stage Cyclical Encoding (Q1=0, Q2=1, Q3=2, Q4=3; Period T=4)
+    day_of_month = df.index.day
+    stage_int = np.where(day_of_month <= 7, 0,
+                np.where(day_of_month <= 15, 1,
+                np.where(day_of_month <= 22, 2, 3)))
+    df['Stage_Sin'] = np.sin(2 * np.pi * stage_int / 4.0)
+    df['Stage_Cos'] = np.cos(2 * np.pi * stage_int / 4.0)
+    
+    # Tier 3: Annual Quarter Cyclical Encoding (Q1=0, Q2=1, Q3=2, Q4=3; Period T=4)
+    quarter_int = df.index.quarter - 1
+    df['Quarter_Sin'] = np.sin(2 * np.pi * quarter_int / 4.0)
+    df['Quarter_Cos'] = np.cos(2 * np.pi * quarter_int / 4.0)
+    
+    # Tier 4: 4-Year Leap / Halving Epoch Cycle (Year % 4; Period T=4)
+    leap_int = df.index.year % 4
+    df['LeapCycle_Sin'] = np.sin(2 * np.pi * leap_int / 4.0)
+    df['LeapCycle_Cos'] = np.cos(2 * np.pi * leap_int / 4.0)
+    
     df = df.dropna()
-    features = ['Price', 'Open', 'High', 'Low', 'Vol.', 'Change %', 'Block_Reward', 'Days_Since_Halving', 'Halving_Progress']
+    features = [
+        'Price', 'Open', 'High', 'Low', 'Vol.', 'Change %',
+        'Day_Sin', 'Day_Cos', 'Stage_Sin', 'Stage_Cos',
+        'Quarter_Sin', 'Quarter_Cos', 'LeapCycle_Sin', 'LeapCycle_Cos',
+        'Days_Since_Halving', 'Halving_Progress'
+    ]
     
     with open(SCALER_PATH, 'rb') as f:
         scaler = pickle.load(f)['scaler']

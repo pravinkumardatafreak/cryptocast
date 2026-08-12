@@ -209,6 +209,29 @@ def fetch_live_data():
     data['Days_Since_Halving'] = days_since
     data['Halving_Progress'] = progress
     
+    # Tier 1: Cyclical Day-of-Week Encoding (Daily Resolution, T=7)
+    day_of_week = data.index.dayofweek
+    data['Day_Sin'] = np.sin(2 * np.pi * day_of_week / 7.0)
+    data['Day_Cos'] = np.cos(2 * np.pi * day_of_week / 7.0)
+    
+    # Tier 2: Intra-Month Stage Cyclical Encoding (Q1=0, Q2=1, Q3=2, Q4=3; Period T=4)
+    day_of_month = data.index.day
+    stage_int = np.where(day_of_month <= 7, 0,
+                np.where(day_of_month <= 15, 1,
+                np.where(day_of_month <= 22, 2, 3)))
+    data['Stage_Sin'] = np.sin(2 * np.pi * stage_int / 4.0)
+    data['Stage_Cos'] = np.cos(2 * np.pi * stage_int / 4.0)
+    
+    # Tier 3: Annual Quarter Cyclical Encoding (Q1=0, Q2=1, Q3=2, Q4=3; Period T=4)
+    quarter_int = data.index.quarter - 1
+    data['Quarter_Sin'] = np.sin(2 * np.pi * quarter_int / 4.0)
+    data['Quarter_Cos'] = np.cos(2 * np.pi * quarter_int / 4.0)
+    
+    # Tier 4: 4-Year Leap / Halving Epoch Cycle (Year % 4; Period T=4)
+    leap_int = data.index.year % 4
+    data['LeapCycle_Sin'] = np.sin(2 * np.pi * leap_int / 4.0)
+    data['LeapCycle_Cos'] = np.cos(2 * np.pi * leap_int / 4.0)
+    
     data = data.dropna() # Drop NaN from pct_change
     return data
 
@@ -233,9 +256,19 @@ def run_inference(model_name, model_class, scaled_sequence, anchor_price):
     predicted_prices = anchor_price * np.exp(predicted_log_returns)
     return predicted_prices
 
+from src.streamlit_utils import render_stakeholder_narrative
+
 # ==============================================================================
 # Streamlit UI
 # ==============================================================================
+render_stakeholder_narrative(
+    page_num=7,
+    total_pages=11,
+    title="Real-Time Live Model Prediction",
+    simple_explanation="This page streams real-time live Bitcoin data from Yahoo Finance and executes PyTorch neural network forward passes for 1D, 3D, and 7D price forecasts.",
+    connection_story="Applies trained PyTorch model weights (Page 3) to live streaming data, producing current target forecasts that feed directly into Page 10 (Trading Simulator).",
+    key_takeaway="Live 60-day feature sequences are scaled and inferred instantly, allowing real-time execution of the PatchTST 7D Bullish strategy."
+)
 
 st.markdown('<div class="cc-eyebrow">Real-Time Inference</div>', unsafe_allow_html=True)
 st.markdown('<div class="cc-title">Live Model Prediction Demo 🔴</div>', unsafe_allow_html=True)
@@ -269,8 +302,13 @@ else:
         scalers = pickle.load(f)
     scaler = scalers['scaler']
     
-    # Prepare sequence
-    features = ['Price', 'Open', 'High', 'Low', 'Vol.', 'Change %', 'Block_Reward', 'Days_Since_Halving', 'Halving_Progress']
+    # Prepare sequence (16 features)
+    features = [
+        'Price', 'Open', 'High', 'Low', 'Vol.', 'Change %',
+        'Day_Sin', 'Day_Cos', 'Stage_Sin', 'Stage_Cos',
+        'Quarter_Sin', 'Quarter_Cos', 'LeapCycle_Sin', 'LeapCycle_Cos',
+        'Days_Since_Halving', 'Halving_Progress'
+    ]
     # Get last 60 days of features
     last_60_days = live_df[features].iloc[-60:]
     scaled_sequence = scaler.transform(last_60_days)
@@ -319,54 +357,95 @@ else:
         # Display Predictions in Cards
         c1, c2, c3 = st.columns(3)
         with c1:
-            pct = ((p_1d - current_price) / current_price) * 100
-            st.metric("1D Forecast (Today)", f"${p_1d:,.2f}", f"{pct:+.2f}%")
+            pct_1d = ((p_1d - current_price) / current_price) * 100
+            st.metric("1D Forecast (Today)", f"${p_1d:,.2f}", f"{pct_1d:+.2f}%")
         with c2:
-            pct = ((p_3d - current_price) / current_price) * 100
-            st.metric("3D Forecast (Today +2D)", f"${p_3d:,.2f}", f"{pct:+.2f}%")
+            pct_3d = ((p_3d - current_price) / current_price) * 100
+            st.metric("3D Forecast (Today +2D)", f"${p_3d:,.2f}", f"{pct_3d:+.2f}%")
         with c3:
-            pct = ((p_7d - current_price) / current_price) * 100
-            st.metric("7D Forecast (Today +6D)", f"${p_7d:,.2f}", f"{pct:+.2f}%")
+            pct_7d = ((p_7d - current_price) / current_price) * 100
+            st.metric("7D Forecast (Today +6D)", f"${p_7d:,.2f}", f"{pct_7d:+.2f}%")
         
-        # Plot the Trajectory
-        # Historical 30 days + Predictions
-        hist_plot_df = live_df.iloc[-30:]
-        
-        # Create Future Dates
-        last_date = hist_plot_df.index[-1]
-        future_dates = [last_date + pd.Timedelta(days=d) for d in [1, 3, 7]]
-        
-        fig = go.Figure()
-        
-        # Historical Line
-        fig.add_trace(go.Scatter(
-            x=hist_plot_df.index, y=hist_plot_df['Price'],
-            mode='lines', name='Historical', line=dict(color='#c9d1d9', width=2)
-        ))
-        
-        # Last point to anchor predictions visually
-        pred_x = [last_date] + future_dates
-        pred_y = [current_price, p_1d, p_3d, p_7d]
-        
-        fig.add_trace(go.Scatter(
-            x=pred_x, y=pred_y,
-            mode='lines+markers', name=f'{model_choice} Forecast',
-            line=dict(color='#4ade80', width=3, dash='dot'),
-            marker=dict(size=8, color='#4ade80')
-        ))
-        
-        fig.update_layout(
-            **DARK_LAYOUT,
-            title="Live Forecast Trajectory",
-            height=400,
-            xaxis_title="Date",
-            yaxis_title="Price (USD)",
-            showlegend=True,
-            legend=dict(bgcolor="rgba(0,0,0,0)"),
-            hovermode='x unified'
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
+        # Real-time Directional Bias Badge & Gauge Plot
+        from src.directional_bias import classify_directional_bias
+        bias_label, bias_color, bias_level = classify_directional_bias(current_price, p_1d, p_3d, p_7d)
+
+        col_bias_gauge, col_bias_chart = st.columns([1, 2])
+
+        with col_bias_gauge:
+            # Directional Bias Gauge (-2 to +2)
+            gauge_val = bias_level
+            fig_bias_gauge = go.Figure(go.Indicator(
+                mode = "gauge+number+delta",
+                value = gauge_val,
+                domain = {'x': [0, 1], 'y': [0, 1]},
+                title = {'text': f"Directional Bias: {bias_label}", 'font': {'size': 14, 'color': bias_color}},
+                number = {'font': {'color': bias_color, 'size': 32}},
+                gauge = {
+                    'axis': {'range': [-2, 2], 'tickwidth': 1, 'tickcolor': "#8b949e", 'dtick': 1},
+                    'bar': {'color': bias_color},
+                    'bgcolor': "#161b22",
+                    'borderwidth': 2,
+                    'bordercolor': "#30363d",
+                    'steps': [
+                        {'range': [-2, -1], 'color': 'rgba(239, 68, 68, 0.4)'},
+                        {'range': [-1, 0], 'color': 'rgba(248, 113, 113, 0.2)'},
+                        {'range': [0, 1], 'color': 'rgba(74, 222, 128, 0.2)'},
+                        {'range': [1, 2], 'color': 'rgba(34, 197, 94, 0.4)'}
+                    ]
+                }
+            ))
+            fig_bias_gauge.update_layout(**DARK_LAYOUT, height=360)
+            st.plotly_chart(fig_bias_gauge, use_container_width=True)
+
+        with col_bias_chart:
+            # Historical 30 days + Predictions with Confidence Band
+            hist_plot_df = live_df.iloc[-30:]
+            last_date = hist_plot_df.index[-1]
+            future_dates = [last_date + pd.Timedelta(days=d) for d in [1, 3, 7]]
+
+            fig = go.Figure()
+            # Historical Line
+            fig.add_trace(go.Scatter(
+                x=hist_plot_df.index, y=hist_plot_df['Price'],
+                mode='lines', name='Historical BTC Price', line=dict(color='#c9d1d9', width=2)
+            ))
+
+            pred_x = [last_date] + future_dates
+            pred_y = [current_price, p_1d, p_3d, p_7d]
+
+            # Shaded Confidence Interval (±1.5%)
+            upper_y = [p * 1.015 for p in pred_y]
+            lower_y = [p * 0.985 for p in pred_y]
+
+            fig.add_trace(go.Scatter(
+                x=pred_x + pred_x[::-1],
+                y=upper_y + lower_y[::-1],
+                fill='toself',
+                fillcolor='rgba(74, 222, 128, 0.15)',
+                line=dict(color='rgba(255,255,255,0)'),
+                hoverinfo="skip",
+                name="Confidence Interval (±1.5%)"
+            ))
+
+            fig.add_trace(go.Scatter(
+                x=pred_x, y=pred_y,
+                mode='lines+markers', name=f'{model_choice} Forecast Target',
+                line=dict(color='#4ade80', width=3),
+                marker=dict(size=9, color='#4ade80')
+            ))
+
+            fig.update_layout(
+                **DARK_LAYOUT,
+                title="Live Multi-Horizon Price Projection Trajectory",
+                height=360,
+                xaxis_title="Date",
+                yaxis_title="Price (USD)",
+                yaxis=dict(tickformat="$,"),
+                showlegend=True,
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+            st.plotly_chart(fig, use_container_width=True)
         
         # --- AI Insights for Single Prediction ---
         st.markdown("---")

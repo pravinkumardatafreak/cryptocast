@@ -58,19 +58,58 @@ def inject_custom_css():
         unsafe_allow_html=True,
     )
 
-def card(label, value, detail=""):
+def card(title, value, detail=""):
     st.markdown(
-        f'<div class="cc-card"><h4>{label}</h4>'
-        f'<p class="cc-value">{value}</p>'
-        f'<p class="cc-detail">{detail}</p></div>',
+        f"""
+        <div class="cc-card">
+            <h4>{title}</h4>
+            <div class="cc-value">{value}</div>
+            {"<div class='cc-detail'>" + detail + "</div>" if detail else ""}
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
-def callout(title, body_html, warn=False):
-    cls = "cc-callout warn" if warn else "cc-callout"
+def callout(title, text, type="info", warn=False):
+    cls = "cc-callout warn" if (warn or type == "warn") else "cc-callout"
     st.markdown(
-        f'<div class="{cls}"><h4>{title}</h4>{body_html}</div>',
+        f"""
+        <div class="{cls}">
+            <h4>{title}</h4>
+            <p>{text}</p>
+        </div>
+        """,
         unsafe_allow_html=True,
+    )
+
+def render_stakeholder_narrative(page_num, total_pages, title, simple_explanation, connection_story, key_takeaway):
+    """
+    Renders an executive presentation narrative banner at the top of every dashboard page,
+    explaining the page in plain business language and connecting it to the overall workflow.
+    """
+    st.markdown(
+        f'''
+        <div style="background: linear-gradient(135deg, #161b22 0%, #0d1117 100%); border: 1px solid #30363d; border-left: 4px solid #4ade80; border-radius: 10px; padding: 18px 22px; margin-bottom: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.25);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #4ade80;">
+                    Step {page_num} of {total_pages} · Executive Storyline & Business Impact
+                </span>
+                <span style="background: #21262d; border: 1px solid #30363d; color: #8b949e; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600;">
+                    Stakeholder View
+                </span>
+            </div>
+            <div style="font-size: 14px; color: #e6edf3; font-weight: 500; line-height: 1.5; margin-bottom: 10px;">
+                <b>💡 Plain English Goal</b>: {simple_explanation}
+            </div>
+            <div style="font-size: 13px; color: #8b949e; line-height: 1.5; margin-bottom: 10px; background: #0d1117; padding: 10px 14px; border-radius: 6px; border: 1px solid #21262d;">
+                🔗 <b>Workflow Connection</b>: {connection_story}
+            </div>
+            <div style="font-size: 13px; color: #4ade80; font-weight: 600;">
+                🎯 <b>Executive Takeaway</b>: {key_takeaway}
+            </div>
+        </div>
+        ''',
+        unsafe_allow_html=True
     )
 
 DARK_LAYOUT = dict(

@@ -183,11 +183,39 @@ def fetch_oos_data(start_date):
     data['Days_Since_Halving'] = days_since
     data['Halving_Progress'] = progress
     
+    # Tier 1: Cyclical Day-of-Week Encoding (Daily Resolution, T=7)
+    day_of_week = data.index.dayofweek
+    data['Day_Sin'] = np.sin(2 * np.pi * day_of_week / 7.0)
+    data['Day_Cos'] = np.cos(2 * np.pi * day_of_week / 7.0)
+    
+    # Tier 2: Intra-Month Stage Cyclical Encoding (Q1=0, Q2=1, Q3=2, Q4=3; Period T=4)
+    day_of_month = data.index.day
+    stage_int = np.where(day_of_month <= 7, 0,
+                np.where(day_of_month <= 15, 1,
+                np.where(day_of_month <= 22, 2, 3)))
+    data['Stage_Sin'] = np.sin(2 * np.pi * stage_int / 4.0)
+    data['Stage_Cos'] = np.cos(2 * np.pi * stage_int / 4.0)
+    
+    # Tier 3: Annual Quarter Cyclical Encoding (Q1=0, Q2=1, Q3=2, Q4=3; Period T=4)
+    quarter_int = data.index.quarter - 1
+    data['Quarter_Sin'] = np.sin(2 * np.pi * quarter_int / 4.0)
+    data['Quarter_Cos'] = np.cos(2 * np.pi * quarter_int / 4.0)
+    
+    # Tier 4: 4-Year Leap / Halving Epoch Cycle (Year % 4; Period T=4)
+    leap_int = data.index.year % 4
+    data['LeapCycle_Sin'] = np.sin(2 * np.pi * leap_int / 4.0)
+    data['LeapCycle_Cos'] = np.cos(2 * np.pi * leap_int / 4.0)
+    
     data = data.dropna()
     return data
 
 def run_forward_test(model_name, model_class, oos_data, scaler, seq_length=60):
-    features = ['Price', 'Open', 'High', 'Low', 'Vol.', 'Change %', 'Block_Reward', 'Days_Since_Halving', 'Halving_Progress']
+    features = [
+        'Price', 'Open', 'High', 'Low', 'Vol.', 'Change %',
+        'Day_Sin', 'Day_Cos', 'Stage_Sin', 'Stage_Cos',
+        'Quarter_Sin', 'Quarter_Cos', 'LeapCycle_Sin', 'LeapCycle_Cos',
+        'Days_Since_Halving', 'Halving_Progress'
+    ]
     
     scaled_data = scaler.transform(oos_data[features])
     raw_prices = oos_data['Price'].values
@@ -290,7 +318,12 @@ if 'ft_preds' in st.session_state:
     eval_dates = st.session_state['ft_eval_dates']
     model_opt = st.session_state['ft_model']
 
-    # Calculate Metrics
+    # Calculate Metrics & MDA
+    from src.directional_bias import compute_mda
+    # Extract anchor prices from raw oos data for exact MDA computation
+    anchor_prices = oos_df['Price'].values[-len(preds):]
+    mda_dict = compute_mda(actuals, preds, anchor_prices)
+
     metrics = []
     horizons = ['1D', '3D', '7D']
     for idx, h in enumerate(horizons):
@@ -300,17 +333,19 @@ if 'ft_preds' in st.session_state:
         mae = mean_absolute_error(y_a, y_p)
         rmse = np.sqrt(mean_squared_error(y_a, y_p))
         mape = mean_absolute_percentage_error(y_a, y_p) * 100
+        mda_val = mda_dict.get(f"MDA_{h}", 0.0)
         
         metrics.append({
             "Horizon": h,
             "MAE (USD)": mae,
             "RMSE (USD)": rmse,
-            "MAPE (%)": mape
+            "MAPE (%)": mape,
+            "MDA Accuracy (%)": mda_val
         })
         
     metrics_df = pd.DataFrame(metrics)
     
-    st.markdown('<div class="cc-section-title">OOS Performance Metrics</div>', unsafe_allow_html=True)
+    st.markdown('<div class="cc-section-title">OOS Performance & Directional Accuracy Metrics</div>', unsafe_allow_html=True)
     st.dataframe(
         metrics_df, 
         use_container_width=True, 
@@ -319,28 +354,36 @@ if 'ft_preds' in st.session_state:
             "MAE (USD)": st.column_config.NumberColumn(format="$%.2f"),
             "RMSE (USD)": st.column_config.NumberColumn(format="$%.2f"),
             "MAPE (%)": st.column_config.NumberColumn(format="%.2f%%"),
+            "MDA Accuracy (%)": st.column_config.NumberColumn(format="%.2f%%"),
         }
     )
     
-    # Plot OOS Predictions
-    st.markdown('<div class="cc-section-title">Out-of-Sample Predictions vs Actual Price</div>', unsafe_allow_html=True)
+    # Plot OOS Predictions & Alert Lines
+    st.markdown('<div class="cc-section-title">Out-of-Sample Predictions vs Dynamic Alert Levels</div>', unsafe_allow_html=True)
     
-    horizon_opt = st.radio("Select Plot Horizon", ["1D", "3D", "7D"], horizontal=True)
+    horizon_opt = st.radio("Select Plot Display Mode", ["1D", "3D", "7D", "Multi-Horizon Overlay (3 Alert Lines)"], horizontal=True)
     
-    if horizon_opt == "1D":
-        h_idx = 0
-        plot_dates = [d + pd.Timedelta(days=1) for d in eval_dates]
-    elif horizon_opt == "3D":
-        h_idx = 1
-        plot_dates = [d + pd.Timedelta(days=3) for d in eval_dates]
-    else:
-        h_idx = 2
-        plot_dates = [d + pd.Timedelta(days=7) for d in eval_dates]
-        
     fig = go.Figure()
-    # Plot actuals and preds mapped to the exact evaluation dates to avoid lookback gap
-    fig.add_trace(go.Scatter(x=plot_dates, y=actuals[:, h_idx], mode='lines', name=f'Actual {horizon_opt} Price', line=dict(color='#828b97', width=1)))
-    fig.add_trace(go.Scatter(x=plot_dates, y=preds[:, h_idx], mode='lines', name=f'{model_opt} {horizon_opt} Prediction', line=dict(color='#29b57a', width=1.5, dash='dash')))
+    plot_dates_anchor = [d for d in eval_dates]
+
+    if horizon_opt == "Multi-Horizon Overlay (3 Alert Lines)":
+        fig.add_trace(go.Scatter(x=plot_dates_anchor, y=actuals[:, 0], mode='lines', name='Actual BTC Close', line=dict(color='#e6edf3', width=2)))
+        fig.add_trace(go.Scatter(x=plot_dates_anchor, y=preds[:, 0], mode='lines', name='1D Alert Line (Fast Momentum)', line=dict(color='#38bdf8', width=1.5, dash='solid')))
+        fig.add_trace(go.Scatter(x=plot_dates_anchor, y=preds[:, 1], mode='lines', name='3D Alert Line (Swing Target)', line=dict(color='#c084fc', width=1.5, dash='dash')))
+        fig.add_trace(go.Scatter(x=plot_dates_anchor, y=preds[:, 2], mode='lines', name='7D Alert Line (Macro Trend)', line=dict(color='#fbbf24', width=2, dash='dot')))
+    else:
+        if horizon_opt == "1D":
+            h_idx = 0
+            plot_dates = [d + pd.Timedelta(days=1) for d in eval_dates]
+        elif horizon_opt == "3D":
+            h_idx = 1
+            plot_dates = [d + pd.Timedelta(days=3) for d in eval_dates]
+        else:
+            h_idx = 2
+            plot_dates = [d + pd.Timedelta(days=7) for d in eval_dates]
+            
+        fig.add_trace(go.Scatter(x=plot_dates, y=actuals[:, h_idx], mode='lines', name=f'Actual {horizon_opt} Price', line=dict(color='#828b97', width=1)))
+        fig.add_trace(go.Scatter(x=plot_dates, y=preds[:, h_idx], mode='lines', name=f'{model_opt} {horizon_opt} Prediction', line=dict(color='#29b57a', width=1.5, dash='dash')))
     
     fig.update_layout(
         template='plotly_dark',

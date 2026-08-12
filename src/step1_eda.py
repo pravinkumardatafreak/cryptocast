@@ -259,14 +259,42 @@ data['Block_Reward'] = rewards
 data['Days_Since_Halving'] = days_since
 data['Halving_Progress'] = progress
 
+# Tier 1: Cyclical Day-of-Week Encoding (Daily Resolution, T=7)
+day_of_week = data.index.dayofweek
+data['Day_Sin'] = np.sin(2 * np.pi * day_of_week / 7.0)
+data['Day_Cos'] = np.cos(2 * np.pi * day_of_week / 7.0)
+
+# Tier 2: Intra-Month Stage Cyclical Encoding (Q1=0, Q2=1, Q3=2, Q4=3; Period T=4)
+day_of_month = data.index.day
+stage_int = np.where(day_of_month <= 7, 0,
+            np.where(day_of_month <= 15, 1,
+            np.where(day_of_month <= 22, 2, 3)))
+data['Stage_Sin'] = np.sin(2 * np.pi * stage_int / 4.0)
+data['Stage_Cos'] = np.cos(2 * np.pi * stage_int / 4.0)
+
+# Tier 3: Annual Quarter Cyclical Encoding (Q1=0, Q2=1, Q3=2, Q4=3; Period T=4)
+quarter_int = data.index.quarter - 1
+data['Quarter_Sin'] = np.sin(2 * np.pi * quarter_int / 4.0)
+data['Quarter_Cos'] = np.cos(2 * np.pi * quarter_int / 4.0)
+
+# Tier 4: 4-Year Leap / Halving Epoch Cycle (Year % 4; Period T=4)
+leap_int = data.index.year % 4
+data['LeapCycle_Sin'] = np.sin(2 * np.pi * leap_int / 4.0)
+data['LeapCycle_Cos'] = np.cos(2 * np.pi * leap_int / 4.0)
+
 # Drop rows with NaNs (e.g. initial Change % row)
 data = data.dropna()
 
-# Save cleaned data with whitepaper features
+# Save cleaned data with whitepaper & 4-tier multi-resolution cyclical features
 data.to_csv(csv_path)
 
-# Features list representing the updated whitepaper-derived dataset
-features = ['Price', 'Open', 'High', 'Low', 'Vol.', 'Change %', 'Block_Reward', 'Days_Since_Halving', 'Halving_Progress']
+# 16-Feature 4-Tier Multi-Resolution Schema
+features = [
+    'Price', 'Open', 'High', 'Low', 'Vol.', 'Change %',
+    'Day_Sin', 'Day_Cos', 'Stage_Sin', 'Stage_Cos',
+    'Quarter_Sin', 'Quarter_Cos', 'LeapCycle_Sin', 'LeapCycle_Cos',
+    'Days_Since_Halving', 'Halving_Progress'
+]
 target_col = 'Price'
 
 # Determine the chronological split index to avoid data leakage

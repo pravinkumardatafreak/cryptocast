@@ -3,7 +3,11 @@ import time
 import pandas as pd
 import streamlit as st
 import groq
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv():
+        pass
 
 def get_groq_api_key() -> str:
     """Load API key from .env, env vars, or Streamlit secrets."""
