@@ -343,7 +343,7 @@ else:
 
 # Custom Loss Function to penalize 1-Day Lag
 class DirectionalMSELoss(nn.Module):
-    def __init__(self, alpha=0.1):
+    def __init__(self, alpha=0.30):
         """
         alpha controls the strength of the directional penalty.
         """
@@ -367,7 +367,7 @@ class DirectionalMSELoss(nn.Module):
 lr_map = {'1D-CNN': 0.001, 'RNN': 0.001, 'LSTM': 0.0005, 'Transformer': 0.0005, 'PatchTST': 0.0005}
 learning_rate = lr_map[model_name]
 
-criterion = DirectionalMSELoss(alpha=0.15)
+criterion = DirectionalMSELoss(alpha=0.30)
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
 # Learning Rate Scheduler
