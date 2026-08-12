@@ -42,3 +42,5 @@ env/
 # Misc
 *.log
 .env
+*.pdf
+CryptoCast_Project_Guide.pdf
