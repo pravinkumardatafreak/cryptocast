@@ -69,7 +69,7 @@ During evaluation, be prepared to discuss these three structural bottlenecks in 
 ```
 cryptocast/
 ├── cryptocast.py                    # Main entry point — runs full pipeline
-├── app.py                           # Streamlit dashboard entry point (10 pages)
+├── app.py                           # Streamlit dashboard entry point (11 pages)
 ├── requirements.txt                 # Python dependencies
 ├── .gitignore
 ├── meta.json                        # Dataset metadata (shape, date range)
@@ -88,9 +88,13 @@ cryptocast/
 │   ├── step4_wfv.py                 # Walk-forward validation (backtesting)
 │   ├── train_model_pytorch.py       # Single-model PyTorch trainer (called by step2)
 │   ├── llm_insights.py              # Groq LLM integration for AI-generated insights
-│   └── streamlit_utils.py           # Shared dashboard styling helpers
+│   ├── streamlit_utils.py           # Shared dashboard styling helpers
+│   ├── directional_bias.py          # Directional bias metrics & trade signal evaluation
+│   ├── hypothesis_strategy.py       # Statistical hypothesis engines (t-tests, Welch, Mann-Whitney)
+│   ├── macro_regime.py              # Macroeconomic regime detection & cycle classification
+│   └── stacked_meta_features.py     # XGBoost/LightGBM meta-learner feature extraction
 │
-├── pages/                           # 10 Streamlit dashboard pages (see below)
+├── pages/                           # 11 Streamlit dashboard pages (see below)
 │
 ├── models/                          # Saved weights for live inference
 │   ├── LSTM.pth
@@ -179,7 +183,8 @@ Opens at `http://localhost:8502`. The `bun run dev` script automatically passes 
 - **7. Live Prediction** — Real-time BTC data pulled from Yahoo Finance, run through a live PyTorch forward pass (LSTM, Transformer, or PatchTST)
 - **8. Forward Testing** — True out-of-sample evaluation on unseen market data from March 2024 to present
 - **9. Explainable AI** — SHAP-based explainability showing which features drive each prediction
-- **10. Trading Simulator** — Translates model accuracy into a simulated trading strategy and business ROI
+- **10. Trading Simulator** — 3-state trading simulator, strategy comparison, and risk-adjusted return evaluation
+- **11. Statistical Hypothesis Testing** — Student's t-test, Mann-Whitney U test, ANOVA, Welch's t-test, and SQL Query Studio for quantitative financial analytics
 
 ## Model Architectures (PyTorch)
 
