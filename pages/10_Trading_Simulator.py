@@ -316,23 +316,27 @@ def _prepare_all_models_data(oos_data):
 
 
 def run_hybrid_confluence_simulation(
-    oos_data, threshold_z=1.0, lookback=20, risk_off_alloc=0.5, sma_period=50, initial_capital=10000.0, strategy_mode="PatchTST 7D Bullish + Mon/Tue Weekly Open Discount (Master Strategy)"
+    oos_data, threshold_z=1.0, lookback=20, risk_off_alloc=0.5, sma_period=50, initial_capital=10000.0
 ):
-    """Executes quantitative strategy simulation based on user-selected strategy mode."""
+    """CryptoCast Unified Confluence Strategy.
+
+    Combines 4 signal layers into one trading system:
+      Layer 1 — PatchTST 7D Directional Forecast (structural trend)
+      Layer 2 — Mon/Tue Weekly Open Discount (seasonality entry)
+      Layer 3 — 50-Day SMA Macro Overlay (crash protection)
+      Layer 4 — Z-Score Mean Reversion (oversold confirmation)
+
+    Entry requires ≥ 3 of 4 layers to agree (confluence vote).
+    Exit when PatchTST forecast turns bearish OR Sunday weekly reset.
+    """
     prep = _prepare_all_models_data(oos_data)
     if prep is None:
         return None
     anchors, actuals, eval_dates, model_preds, buy_hold_btc = prep
 
-    # Target model: PatchTST (fallback to first available model if PatchTST unavailable)
+    # Primary model: PatchTST (fallback to first available)
     target_model_name = "PatchTST" if "PatchTST" in model_preds else list(model_preds.keys())[0]
-    patchtst_7d_preds = model_preds[target_model_name][:, 2]  # Index 2 = 7D Horizon
-
-    # Top-2 Ensemble calculation
-    available = sorted(model_preds.keys(), key=lambda m: _MODEL_1D_MAE.get(m, 9999))
-    top2_names = available[:min(2, len(available))]
-    ensemble_signal = np.mean([model_preds[m][:, 0] for m in top2_names], axis=0)
-    ensemble_signal = ensemble_signal - np.mean(ensemble_signal)
+    patchtst_preds = model_preds[target_model_name]  # (N, 3) — columns: 1D, 3D, 7D
 
     # 1. Macro 50-day SMA
     price_series = oos_data['Price']
@@ -359,9 +363,13 @@ def run_hybrid_confluence_simulation(
     trades_executed = 0
     winning_trades = 0
     in_position = False
+    entry_price = 0.0
 
     risk_on_days = 0
     risk_off_days = 0
+
+    # Per-trade log for transparency
+    trade_log = []
 
     for t in range(len(eval_dates)):
         current_dt = eval_dates_dt[t]
@@ -370,8 +378,10 @@ def run_hybrid_confluence_simulation(
         week_open_price = week_opens_eval[t]
 
         is_risk_on = current_price >= sma_val
-        if is_risk_on: risk_on_days += 1
-        else: risk_off_days += 1
+        if is_risk_on:
+            risk_on_days += 1
+        else:
+            risk_off_days += 1
 
         portfolio_val = cash + (btc_held * current_price)
         equity_curve.append(portfolio_val)
@@ -380,52 +390,32 @@ def run_hybrid_confluence_simulation(
         if t < lookback:
             continue
 
-        # Strategy Signals
-        patchtst_7d_log_ret = patchtst_7d_preds[t]
+        # ── LAYER 1: PatchTST 7D Directional Forecast ──
+        patchtst_7d_log_ret = patchtst_preds[t, 2]
         predicted_7d_price = current_price * np.exp(patchtst_7d_log_ret)
-        patchtst_7d_bullish = predicted_7d_price > current_price
-        anticipated_bullish_week = predicted_7d_price > week_open_price
+        layer1_bullish = predicted_7d_price > current_price
+
+        # ── LAYER 2: Mon/Tue Weekly Open Discount ──
         is_mon_or_tue = current_dt.dayofweek in [0, 1]
         below_week_open = current_price < week_open_price
+        layer2_discount = is_mon_or_tue and below_week_open
 
-        # Z-Score Mean Reversion Signal
+        # ── LAYER 3: 50-Day SMA Macro Overlay ──
+        layer3_macro_ok = is_risk_on
+
+        # ── LAYER 4: Z-Score Mean Reversion ──
         window_prices = anchors[t - lookback : t]
         rolling_mean = np.mean(window_prices)
         rolling_std = np.std(window_prices)
         z_score = (current_price - rolling_mean) / rolling_std if rolling_std > 1e-8 else 0.0
-        z_oversold = z_score < -threshold_z
+        layer4_oversold = z_score < -threshold_z
 
-        # Strategy Mode Condition Mapping
-        if strategy_mode.startswith("PatchTST 7D Bullish"):
-            buy_condition = patchtst_7d_bullish and anticipated_bullish_week and is_mon_or_tue and below_week_open
-            sell_condition = patchtst_7d_preds[t] <= 0.0 or current_dt.dayofweek == 6
-        elif strategy_mode.startswith("Statistical Hypothesis"):
-            # Hypothesis test filter: Mon/Tue discount + PatchTST 7D bullish + t-stat > 0
-            from src.hypothesis_strategy import evaluate_statistical_gate
-            # Welch's t-test on this historical point
-            is_stat_valid = anticipated_bullish_week and patchtst_7d_bullish
-            buy_condition = is_stat_valid and is_mon_or_tue and below_week_open
-            sell_condition = patchtst_7d_preds[t] <= 0.0 or current_dt.dayofweek == 6
-        elif strategy_mode.startswith("Hierarchical 2-Stage"):
-            # 2-Stage Stacking Meta-Learner prediction signal
-            p1d = model_preds[target_model_name][t, 0]
-            p3d = model_preds[target_model_name][t, 1]
-            p7d = model_preds[target_model_name][t, 2]
-            # Meta-learner signal: Bullish when 1D + 3D momentum support 7D trend
-            buy_condition = (p1d > 0) and (p3d > 0) and (p7d > 0)
-            sell_condition = (p1d < 0) or (p7d < 0)
-        elif strategy_mode.startswith("Top-2 AI Ensemble"):
-            buy_condition = ensemble_signal[t] > 0
-            sell_condition = ensemble_signal[t] < 0
-        elif strategy_mode.startswith("Statistical Z-Score"):
-            buy_condition = z_oversold
-            sell_condition = z_score > threshold_z
-        elif strategy_mode.startswith("Intra-Month Stage"):
-            buy_condition = current_price < week_open_price
-            sell_condition = current_price >= week_open_price
-        else: # Pure Macro 50 SMA
-            buy_condition = is_risk_on
-            sell_condition = not is_risk_on
+        # ── CONFLUENCE VOTE: ≥ 3 of 4 layers must agree ──
+        vote = sum([layer1_bullish, layer2_discount, layer3_macro_ok, layer4_oversold])
+        buy_condition = vote >= 3
+
+        # ── EXIT: PatchTST bearish OR Sunday weekly reset ──
+        sell_condition = patchtst_preds[t, 2] <= 0.0 or current_dt.dayofweek == 6
 
         # ENTRY
         if buy_condition and not in_position:
@@ -436,13 +426,29 @@ def run_hybrid_confluence_simulation(
             entry_price = current_price
             in_position = True
             trades_executed += 1
+            trade_log.append({
+                'date': current_dt.strftime('%Y-%m-%d'),
+                'action': 'BUY',
+                'price': current_price,
+                'vote': vote,
+                'layers': f"L1:{'✓' if layer1_bullish else '✗'} L2:{'✓' if layer2_discount else '✗'} L3:{'✓' if layer3_macro_ok else '✗'} L4:{'✓' if layer4_oversold else '✗'}"
+            })
 
         # EXIT
         elif sell_condition and in_position:
             cash = cash + (btc_held * current_price)
             in_position = False
-            if current_price > entry_price:
+            is_win = current_price > entry_price
+            if is_win:
                 winning_trades += 1
+            trade_log.append({
+                'date': current_dt.strftime('%Y-%m-%d'),
+                'action': 'SELL',
+                'price': current_price,
+                'pnl': f"{'WIN' if is_win else 'LOSS'}",
+                'vote': '-',
+                'layers': '-'
+            })
             btc_held = 0.0
 
     final_price = actuals[-1]
@@ -466,6 +472,10 @@ def run_hybrid_confluence_simulation(
     risk_on_pct = (risk_on_days / total_eval_days * 100) if total_eval_days > 0 else 0.0
     risk_off_pct = (risk_off_days / total_eval_days * 100) if total_eval_days > 0 else 0.0
 
+    # Sharpe Ratio (annualised)
+    daily_returns = np.diff(eq_arr) / eq_arr[:-1]
+    sharpe = (np.mean(daily_returns) / (np.std(daily_returns) + 1e-10)) * np.sqrt(365)
+
     return {
         'dates': plot_dates,
         'equity_curve': equity_curve,
@@ -479,9 +489,10 @@ def run_hybrid_confluence_simulation(
         'buy_hold_val': buy_hold_curve[-1],
         'max_strat_dd': max_strat_dd,
         'max_bh_dd': max_bh_dd,
-        'top2_models': top2_names,
         'risk_on_pct': risk_on_pct,
         'risk_off_pct': risk_off_pct,
+        'sharpe': sharpe,
+        'trade_log': trade_log,
     }
 
 from src.streamlit_utils import render_stakeholder_narrative
@@ -495,12 +506,12 @@ render_stakeholder_narrative(
     title="Trading Bot Simulator",
     simple_explanation="This page translates deep learning prediction accuracy into real-world Business ROI, capital growth, and risk-managed portfolio execution.",
     connection_story="Connects model predictions (Pages 3, 7, 8) and statistical hypothesis tests (Page 11) to simulate algorithmic execution on live out-of-sample market data.",
-    key_takeaway="Combining PatchTST 7D predictions with 50-day SMA Macro Risk Overlay protects capital during market crashes while exploiting weekly discount entries."
+    key_takeaway="The CryptoCast Confluence Strategy combines 4 signal layers — PatchTST 7D direction, weekly discount entry, macro SMA overlay, and Z-score mean reversion — into a single risk-managed system."
 )
 
 st.markdown('<div class="cc-eyebrow">Financial Impact</div>', unsafe_allow_html=True)
 st.markdown('<div class="cc-title">Trading Bot Simulator 💸</div>', unsafe_allow_html=True)
-st.markdown('<div class="cc-subtitle">Translate mathematical accuracy into real-world Business ROI using multiple quantitative trading strategies.</div>', unsafe_allow_html=True)
+st.markdown('<div class="cc-subtitle">Unified 4-Layer Confluence Strategy — combining the best signals into one risk-managed trading system.</div>', unsafe_allow_html=True)
 
 if not os.path.exists(DATA_PATH) or not os.path.exists(SCALER_PATH):
     st.error("Training data or scaler not found. Ensure previous steps are complete.")
@@ -509,172 +520,149 @@ if not os.path.exists(DATA_PATH) or not os.path.exists(SCALER_PATH):
 train_df = pd.read_csv(DATA_PATH)
 last_train_date = pd.to_datetime(train_df['Date'].max())
 
-# ── Strategy Selection Dropdown ────────────────────────────────────────────────
-STRATEGY_OPTIONS = {
-    "PatchTST 7D Bullish + Mon/Tue Weekly Open Discount (Master Strategy)": (
-        "**PatchTST Master Strategy** — Executes entries on Mondays and Tuesdays when PatchTST predicts "
-        "a 7-day bullish forecast above Weekly Open ($P_{7D,pred} > P_{wk\\_open}$), and current price trades at a discount ($P < P_{wk\\_open}$). "
-        "Includes 50-day SMA Macro Risk Overlay."
-    ),
-    "Statistical Hypothesis Test Filtered (Weekly & Daily Timeframes)": (
-        "**Statistical Hypothesis Gated Strategy** — Evaluates Welch's t-Test and Mann-Whitney U tests on Daily and Weekly timeframes. "
-        "Trades execute ONLY when signals pass the statistical significance gate ($t$-stat $> 0, p$-value $< 0.10$)."
-    ),
-    "Hierarchical 2-Stage Stacking Meta-Learner (Weekly Bias)": (
-        "**2-Stage Stacking Meta-Learner Strategy** — Feeds Stage 1 predictions ($r̂_{1D}$ and $r̂_{3D}$) as input features "
-        "into a Stage 2 Gradient Boosting Classifier to predict 7-Day Weekly Directional Bias."
-    ),
-    "Top-2 AI Ensemble Directional Momentum": (
-        "**AI Ensemble Directional Strategy** — Uses top-2 performing PyTorch models (LSTM + Transformer) "
-        "to execute trades on 1D positive price momentum predictions with Macro Risk Overlay."
-    ),
-    "Statistical Z-Score Mean Reversion": (
-        "**Statistical Mean Reversion Strategy** — Triggers buy entries when 20-day rolling Z-Score "
-        "drops below oversold threshold (Z < -1.0 σ) with Macro Risk Overlay."
-    ),
-    "Intra-Month Stage Seasonality Discount": (
-        "**Seasonality Stage Discount Strategy** — Triggers entries during Q1–Q4 intra-month stages "
-        "when current price trades below weekly opening price ($P < P_{wk\\_open}$) with Macro Risk Overlay."
-    ),
-    "Pure Macro Liquidity Trend Following (50 SMA)": (
-        "**Macro 50 SMA Trend Strategy** — Holds 100% position when Price >= 50-day SMA (Risk-On) "
-        "and moves to cash when Price < 50-day SMA (Risk-Off)."
-    ),
-}
+# ── Strategy Architecture Explanation ──────────────────────────────────────────
+st.markdown("""
+<div style="background: linear-gradient(135deg, rgba(13,17,23,0.9), rgba(30,41,59,0.9)); border:1px solid #30363d; border-radius:12px; padding:20px; margin-bottom:20px;">
+    <h4 style="color:#38bdf8; margin-bottom:12px;">🧬 CryptoCast Confluence Strategy Architecture</h4>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div style="background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.3); border-radius:8px; padding:12px;">
+            <span style="color:#22c55e; font-weight:700;">Layer 1 — PatchTST 7D Forecast</span>
+            <p style="color:#94a3b8; font-size:12px; margin:4px 0 0;">Champion model predicts 7-day price direction. Entry requires bullish forecast (P̂₇D > P_current).</p>
+        </div>
+        <div style="background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.3); border-radius:8px; padding:12px;">
+            <span style="color:#3b82f6; font-weight:700;">Layer 2 — Mon/Tue Discount Entry</span>
+            <p style="color:#94a3b8; font-size:12px; margin:4px 0 0;">Turn-of-the-Month (TOM) seasonality. Enter only Mon/Tue when price trades below weekly open.</p>
+        </div>
+        <div style="background:rgba(249,115,22,0.1); border:1px solid rgba(249,115,22,0.3); border-radius:8px; padding:12px;">
+            <span style="color:#f97316; font-weight:700;">Layer 3 — 50-Day SMA Overlay</span>
+            <p style="color:#94a3b8; font-size:12px; margin:4px 0 0;">Macro crash protection. Full allocation when Price ≥ SMA (Risk-On), reduced when below (Risk-Off).</p>
+        </div>
+        <div style="background:rgba(168,85,247,0.1); border:1px solid rgba(168,85,247,0.3); border-radius:8px; padding:12px;">
+            <span style="color:#a855f7; font-weight:700;">Layer 4 — Z-Score Mean Reversion</span>
+            <p style="color:#94a3b8; font-size:12px; margin:4px 0 0;">Statistical oversold filter. Confirms entry when price is Z < -σ below rolling mean (bottom-fishing).</p>
+        </div>
+    </div>
+    <p style="color:#e2e8f0; font-size:13px; margin-top:14px; text-align:center; font-weight:600;">
+        📊 Confluence Vote: Entry requires <span style="color:#4ade80;">≥ 3 of 4 layers</span> to agree &nbsp;|&nbsp;
+        Exit: PatchTST turns bearish OR Sunday weekly reset
+    </p>
+</div>
+""", unsafe_allow_html=True)
 
-strategy_opt = st.selectbox(
-    "Select Trading Strategy Mode",
-    options=list(STRATEGY_OPTIONS.keys()),
-    index=0,
-    help="Choose between AI-driven, statistical, seasonal, or trend-following strategy modes."
-)
-
-st.markdown(
-    f'<div style="background:#161b22; border:1px solid #30363d; border-radius:8px; '
-    f'padding:12px 16px; margin-bottom:16px; font-size:14px; color:#c9d1d9;">'
-    f'📖 {STRATEGY_OPTIONS[strategy_opt]}</div>',
-    unsafe_allow_html=True,
-)
-
+# ── Tunable Parameters ─────────────────────────────────────────────────────────
 col1, col2, col3 = st.columns([1, 1, 1])
 with col1:
-    st.markdown(
-        '<div style="padding-top:10px; color:#4ade80; font-size:13px; '
-        'font-weight:600;">🤖 AI Engine: PatchTST & Ensemble<br>'
-        '(16-Feature Multi-Res Architecture)</div>',
-        unsafe_allow_html=True,
-    )
-    model_opt = None
-with col2:
     threshold_val = st.number_input(
         "Z-Score Threshold (σ)",
         min_value=0.0, max_value=3.0, value=1.0, step=0.1,
-        help="Buy/sell when price deviates this many standard deviations from rolling mean.",
+        help="Layer 4 fires when price Z-score drops below this negative threshold.",
     )
-with col3:
+with col2:
     lookback_days = st.slider(
         "Lookback Window (days)",
         min_value=5, max_value=60, value=20, step=5,
-        help="Number of past days used for rolling Z-score mean reversion.",
+        help="Rolling window for Z-score computation.",
     )
+with col3:
     risk_off_alloc_val = st.slider(
-        "Risk-Off Capital Allocation (%)",
+        "Risk-Off Capital (%)",
         min_value=10, max_value=90, value=50, step=10,
-        help="Capital allocation during Risk-Off macro regime (Price < 50 SMA).",
+        help="Capital allocation when Price < 50-day SMA (Risk-Off regime).",
     )
 
-if st.button("Run Simulation on Unseen Data", type="primary"):
-    with st.spinner("Fetching unseen OOS data from Yahoo Finance..."):
-        oos_df = fetch_oos_data(last_train_date.strftime('%Y-%m-%d'))
-        
-    with st.spinner(f"Running {strategy_opt}..."):
+if st.button("🚀 Run Simulation on Unseen Data", type="primary", use_container_width=True):
+    with st.spinner("Fetching unseen out-of-sample data from Yahoo Finance..."):
+        import time
+        ticker = yf.Ticker("BTC-USD")
+        lookback_start = pd.to_datetime(last_train_date) - pd.Timedelta(days=65)
+        oos_df = None
+        for attempt in range(1, 4):
+            try:
+                oos_df = fetch_oos_data(last_train_date.strftime('%Y-%m-%d'))
+                if oos_df is not None and not oos_df.empty:
+                    break
+            except Exception:
+                pass
+            time.sleep(attempt * 2)
+
+        if oos_df is None or oos_df.empty:
+            st.error("⚠️ Yahoo Finance API temporarily unavailable. Please retry in 30 seconds.")
+            st.stop()
+
+    with st.spinner("Running CryptoCast Confluence Strategy..."):
         results = run_hybrid_confluence_simulation(
             oos_df,
             threshold_z=threshold_val,
             lookback=lookback_days,
             risk_off_alloc=risk_off_alloc_val / 100.0,
-            strategy_mode=strategy_opt,
         )
-        
+
         st.session_state['sim_results'] = results
-        st.session_state['sim_strategy'] = strategy_opt
-        st.session_state['sim_model'] = None
 
 if 'sim_results' in st.session_state and st.session_state['sim_results'] is not None:
     results = st.session_state['sim_results']
-    saved_strategy = st.session_state['sim_strategy']
-    saved_model = st.session_state['sim_model']
-    
-    # Build a label showing which models are in play
-    if saved_strategy in ["Mean Reversion", "Hybrid Master Confluence"]:
-        top2 = results.get('top2_models', [])
-        model_label = f"Top-2 Ensemble ({' + '.join(top2)})"
-    else:
-        model_label = saved_model
 
     st.markdown(
-        f'<div class="cc-section-title">{saved_strategy} Results · '
-        f'{model_label} (Out-Of-Sample Data)</div>',
+        '<div class="cc-section-title">CryptoCast Confluence Strategy — Out-Of-Sample Results</div>',
         unsafe_allow_html=True,
     )
-    
+
     ai_roi = ((results['final_val'] - 10000) / 10000) * 100
     bh_roi = ((results['buy_hold_val'] - 10000) / 10000) * 100
-    
+
     ai_color = "negative" if ai_roi < 0 else ""
-    
-    m1, m2, m3, m4, m5 = st.columns(5)
-    m1.markdown(f'<div class="metric-card"><div class="metric-value {ai_color}">${results["final_val"]:,.2f}</div><div class="metric-label">Strategy Portfolio Value</div></div>', unsafe_allow_html=True)
+    sharpe_color = "negative" if results.get('sharpe', 0) < 0 else ""
+
+    # ── 6-Column Metric Dashboard ──────────────────────────────────────────────
+    m1, m2, m3, m4, m5, m6 = st.columns(6)
+    m1.markdown(f'<div class="metric-card"><div class="metric-value {ai_color}">${results["final_val"]:,.0f}</div><div class="metric-label">Strategy Value</div></div>', unsafe_allow_html=True)
     m2.markdown(f'<div class="metric-card"><div class="metric-value {ai_color}">{ai_roi:+.2f}%</div><div class="metric-label">Strategy ROI</div></div>', unsafe_allow_html=True)
-    m3.markdown(f'<div class="metric-card"><div class="metric-value">{results["trades_executed"]}</div><div class="metric-label">Total Trades Executed</div></div>', unsafe_allow_html=True)
-    m4.markdown(f'<div class="metric-card"><div class="metric-value">{results["win_rate"]:.1f}%</div><div class="metric-label">Signal Win Rate</div></div>', unsafe_allow_html=True)
+    m3.markdown(f'<div class="metric-card"><div class="metric-value">{results["trades_executed"]}</div><div class="metric-label">Total Trades</div></div>', unsafe_allow_html=True)
+    m4.markdown(f'<div class="metric-card"><div class="metric-value">{results["win_rate"]:.1f}%</div><div class="metric-label">Win Rate</div></div>', unsafe_allow_html=True)
     m5.markdown(f'<div class="metric-card"><div class="metric-value">{results.get("max_strat_dd", 0.0):.1f}%</div><div class="metric-label">Max Drawdown</div></div>', unsafe_allow_html=True)
-    
-    st.info(
-        r"💡 **Data Science Audit: Why Sample-Level Hypothesis Testing (t = +1.4771) differs from Portfolio ROI**:" + "\n\n" +
-        r"1. **Sample Expected Return vs Portfolio Compounding**: Hypothesis testing evaluates per-trade 7-day return expectations (+3.84% mean return). " +
-        r"However, portfolio backtesting incorporates sequence holding periods and market regime cash allocations." + "\n" +
-        r"2. **Out-of-Sample Market Drag**: In the recent out-of-sample period (March 2024 to 2026), Bitcoin experienced deep market corrections (32.5% drawdown). " +
-        r"Long-only spot entries entered prior to market-wide liquidations incur drawdowns if held through weekly resets." + "\n" +
-        r"3. **Capital Preservation Edge**: During market selloffs, the Macro 50-day SMA Overlay reduces capital allocation, protecting capital from severe market crashes."
-    )
-    
+    m6.markdown(f'<div class="metric-card"><div class="metric-value {sharpe_color}">{results.get("sharpe", 0.0):.2f}</div><div class="metric-label">Sharpe Ratio</div></div>', unsafe_allow_html=True)
+
+    # ── Benchmark Comparison Row ───────────────────────────────────────────────
+    bh_color = "negative" if bh_roi < 0 else ""
+    b1, b2, b3 = st.columns([1, 1, 2])
+    b1.markdown(f'<div class="metric-card"><div class="metric-value" style="color:#94a3b8;">${results["buy_hold_val"]:,.0f}</div><div class="metric-label">Buy & Hold Value</div></div>', unsafe_allow_html=True)
+    b2.markdown(f'<div class="metric-card"><div class="metric-value" style="color:#94a3b8;">{bh_roi:+.2f}%</div><div class="metric-label">Buy & Hold ROI</div></div>', unsafe_allow_html=True)
+    alpha = ai_roi - bh_roi
+    alpha_color = "#4ade80" if alpha > 0 else "#f87171"
+    b3.markdown(f'<div class="metric-card"><div class="metric-value" style="color:{alpha_color};">{alpha:+.2f}%</div><div class="metric-label">Alpha Generated vs Benchmark</div></div>', unsafe_allow_html=True)
+
     if 'risk_on_pct' in results:
         st.markdown(
             f'<div style="background:#0d1117; border:1px solid #30363d; border-radius:8px; '
             f'padding:12px 16px; margin-top:16px; margin-bottom:8px; font-size:13px; color:#c9d1d9;">'
-            f'🌐 <b>Macro Liquidity Regime Distribution</b>: '
-            f'<span style="color:#4ade80; font-weight:700;">Risk-On (100% Capital Allocation)</span>: {results["risk_on_pct"]:.1f}% of test period | '
-            f'<span style="color:#fb923c; font-weight:700;">Risk-Off (Reduced Allocation)</span>: {results["risk_off_pct"]:.1f}% of test period'
+            f'🌐 <b>Macro Liquidity Regime</b>: '
+            f'<span style="color:#4ade80; font-weight:700;">Risk-On</span>: {results["risk_on_pct"]:.1f}% of period | '
+            f'<span style="color:#fb923c; font-weight:700;">Risk-Off</span>: {results["risk_off_pct"]:.1f}% of period'
             f'</div>',
             unsafe_allow_html=True,
         )
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
+
     # ── Interactive Subplot: Equity Curve + Drawdown Fill ──────────────────────
     from plotly.subplots import make_subplots
-    
+
     fig = make_subplots(
-        rows=2, cols=1, 
-        shared_xaxes=True, 
-        vertical_spacing=0.08, 
+        rows=2, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.08,
         row_heights=[0.7, 0.3],
         subplot_titles=("Portfolio Equity Growth ($10,000 Initial Capital)", "Portfolio Drawdown (%)")
     )
 
     # Top: Equity Curve
     fig.add_trace(go.Scatter(
-        x=results['dates'], y=results['equity_curve'], 
-        mode='lines', name=f'Strategy: {saved_strategy}', 
+        x=results['dates'], y=results['equity_curve'],
+        mode='lines', name='CryptoCast Confluence Strategy',
         line=dict(color='#4ade80', width=2.5)
     ), row=1, col=1)
 
     fig.add_trace(go.Scatter(
-        x=results['dates'], y=results['buy_hold_curve'], 
-        mode='lines', name='Bitcoin Buy & Hold Benchmark', 
+        x=results['dates'], y=results['buy_hold_curve'],
+        mode='lines', name='Bitcoin Buy & Hold Benchmark',
         line=dict(color='#828b97', width=1.5, dash='dot')
     ), row=1, col=1)
 
@@ -715,7 +703,7 @@ if 'sim_results' in st.session_state and st.session_state['sim_results'] is not 
 
     # ── Visual Row 2: Win-Rate Donut Chart & Risk Regime Pie ──────────────────
     c_pie1, c_pie2 = st.columns(2)
-    
+
     with c_pie1:
         win_rate = results.get("win_rate", 50.0)
         fig_donut = go.Figure(data=[go.Pie(
@@ -750,37 +738,41 @@ if 'sim_results' in st.session_state and st.session_state['sim_results'] is not 
             showlegend=False
         )
         st.plotly_chart(fig_regime, use_container_width=True)
-    
+
     if ai_roi > bh_roi:
         st.success(
-            f"**Alpha Generated!** The {model_label} {saved_strategy} "
-            f"strategy outperformed the market benchmark by "
+            f"**Alpha Generated!** The CryptoCast Confluence Strategy "
+            f"outperformed the market benchmark by "
             f"**{ai_roi - bh_roi:+.2f}%** in the unseen period."
         )
     else:
-        tip = (
-            "Try adjusting the Z-Score Threshold or Lookback Window."
-            if saved_strategy == "Mean Reversion"
-            else "Try adjusting the Trade Threshold to filter out noise."
-        )
         st.warning(
-            f"The {model_label} {saved_strategy} strategy underperformed "
-            f"the benchmark. {tip}"
+            f"The Confluence Strategy underperformed the benchmark by {bh_roi - ai_roi:.2f}%. "
+            f"This is expected during sustained bull runs where Buy & Hold captures full upside. "
+            f"The strategy's value is in **drawdown protection** — check Max Drawdown comparison above."
         )
-        
+
+    # ── Trade Log (Expandable) ────────────────────────────────────────────────
+    trade_log = results.get('trade_log', [])
+    if trade_log:
+        with st.expander(f"📋 Trade Execution Log ({len(trade_log)} entries)", expanded=False):
+            log_df = pd.DataFrame(trade_log)
+            st.dataframe(log_df, use_container_width=True, hide_index=True)
+
     # --- AI Insights for Trading Simulation ---
     st.markdown("---")
     api_key = get_groq_api_key()
-    
+
     if st.button("🤖 Explain Strategy Performance", use_container_width=True):
         if not api_key:
             st.warning("Please configure your Groq API Key in the sidebar to use AI Insights.")
         else:
             with st.spinner("Analyzing simulation results with Groq..."):
                 sim_results_for_llm = results.copy()
-                sim_results_for_llm['strategy_name'] = saved_strategy
-                sim_results_for_llm['models'] = model_label
-                
+                sim_results_for_llm.pop('trade_log', None)
+                sim_results_for_llm['strategy_name'] = 'CryptoCast Confluence Strategy'
+                sim_results_for_llm['models'] = 'PatchTST (Champion)'
+
                 insight = generate_trading_insight(sim_results_for_llm, api_key)
                 st.markdown(
                     f'<div style="background:#1e293b; border:1px solid #334155; border-left:4px solid #10b981; '
