@@ -341,10 +341,10 @@ else:
                 title="Live Multi-Horizon Price Projection Trajectory",
                 height=360,
                 xaxis_title="Date",
-                yaxis=dict(title="Price (USD)", tickformat="$,"),
                 showlegend=True,
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
             )
+            fig.update_yaxes(title_text="Price (USD)", tickformat="$,")
             st.plotly_chart(fig, use_container_width=True)
         
         # --- AI Insights for Single Prediction ---
