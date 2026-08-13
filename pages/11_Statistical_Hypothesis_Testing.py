@@ -74,12 +74,12 @@ with tab1:
     col_h0, col_h1 = st.columns(2)
     with col_h0:
         st.info("**Null Hypothesis ($H_0$) — The Skeptic's View**\n\n"
-                "$$\\mu_{\\text{Strategy}} \\le \\mu_{\\text{Baseline}}$$\n\n"
+                r"$$\mu_{\text{Strategy}} \le \mu_{\text{Baseline}}$$" "\n\n"
                 "There is NO statistically significant difference in 7-day returns when buying on Monday/Tuesday Weekly Open Discount days vs ordinary days ($p \\ge 0.05$). Returns are pure random noise.")
         
     with col_h1:
         st.success("**Alternative Hypothesis ($H_1$) — Your Strategy Claim**\n\n"
-                   "$$\\mu_{\\text{Strategy}} > \\mu_{\\text{Baseline}}$$\n\n"
+                   r"$$\mu_{\text{Strategy}} > \mu_{\text{Baseline}}$$" "\n\n"
                    "Buying on Monday/Tuesday Weekly Open Discount days when PatchTST AI predicts a bullish week yields STATISTICALLY SIGNIFICANT excess alpha ($p < 0.05$).")
 
     st.markdown("---")

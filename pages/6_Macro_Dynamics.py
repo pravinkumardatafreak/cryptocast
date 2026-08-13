@@ -89,12 +89,25 @@ macro_table_data = {
 }
 st.dataframe(pd.DataFrame(macro_table_data), use_container_width=True, hide_index=True)
 
-callout(
-    "💡 The Macro Liquidity Transmission Chain:",
-    "$$\\text{CPI Surge (Inflation)} \\longrightarrow \\text{Fed Rate Hikes (QT)} \\longrightarrow \\text{M2 Liquidity Squeeze} \\longrightarrow \\text{BTC Capital Outflow (Risk-Off)}$$"
-    "<br><br>"
-    "$$\\text{Cooling Inflation} \\longrightarrow \\text{Fed Rate Cuts (QE)} \\longrightarrow \\text{Global M2 Expansion} \\longrightarrow \\text{BTC Capital Inflow (Risk-On)}$$"
-)
+st.markdown("""
+<div class="cc-callout">
+    <h4 style="margin-bottom: 12px; color: #38bdf8;">💡 The Macro Liquidity Transmission Chain:</h4>
+    <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13px; font-weight: 600;">
+        <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); padding: 12px 16px; border-radius: 8px; color: #f8fafc;">
+            <span style="color: #f87171;">CPI Surge (Inflation)</span> &nbsp;➔&nbsp; 
+            <span style="color: #f87171;">Fed Rate Hikes (QT)</span> &nbsp;➔&nbsp; 
+            <span style="color: #f87171;">M2 Liquidity Squeeze</span> &nbsp;➔&nbsp; 
+            <span style="color: #ef4444; font-weight: 700;">BTC Capital Outflow (Risk-Off)</span>
+        </div>
+        <div style="background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.3); padding: 12px 16px; border-radius: 8px; color: #f8fafc;">
+            <span style="color: #4ade80;">Cooling Inflation</span> &nbsp;➔&nbsp; 
+            <span style="color: #4ade80;">Fed Rate Cuts (QE)</span> &nbsp;➔&nbsp; 
+            <span style="color: #4ade80;">Global M2 Expansion</span> &nbsp;➔&nbsp; 
+            <span style="color: #22c55e; font-weight: 700;">BTC Capital Inflow (Risk-On)</span>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 st.markdown('<div class="cc-section-title">The Bitcoin Halving Cycle</div>', unsafe_allow_html=True)
 st.write(
