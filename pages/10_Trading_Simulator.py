@@ -318,25 +318,24 @@ def _prepare_all_models_data(oos_data):
 def run_hybrid_confluence_simulation(
     oos_data, threshold_z=1.0, lookback=20, risk_off_alloc=0.5, sma_period=50, initial_capital=10000.0
 ):
-    """CryptoCast Unified Confluence Strategy.
+    """CryptoCast Dual-Directional Confluence Trading Strategy.
 
-    Combines 4 signal layers into one trading system:
-      Layer 1 — PatchTST 7D Directional Forecast (structural trend)
-      Layer 2 — Mon/Tue Weekly Open Discount (seasonality entry)
-      Layer 3 — 50-Day SMA Macro Overlay (crash protection)
-      Layer 4 — Z-Score Mean Reversion (oversold confirmation)
-
-    Entry requires ≥ 3 of 4 layers to agree (confluence vote).
-    Exit when PatchTST forecast turns bearish OR Sunday weekly reset.
+    Execution Rules:
+      1. Top 3 AI Models (LSTM, Transformer, PatchTST) forecast 1D, 3D, and 7D horizons.
+      2. BUY ENTRY (LONG): Top 3 models predict HIGHER prices across 1D/3D/7D, BUT actual price
+         is moving in the opposite direction on Monday/Tuesday (trading BELOW weekly open).
+      3. SELL ENTRY (SHORT): Top 3 models predict LOWER prices across 1D/3D/7D, BUT actual price
+         is moving in the opposite direction on Monday/Tuesday (trading ABOVE weekly open).
+      4. Macro 50-day SMA Overlay dynamically scales capital allocation (Risk-On vs Risk-Off).
     """
     prep = _prepare_all_models_data(oos_data)
     if prep is None:
         return None
     anchors, actuals, eval_dates, model_preds, buy_hold_btc = prep
 
-    # Primary model: PatchTST (fallback to first available)
-    target_model_name = "PatchTST" if "PatchTST" in model_preds else list(model_preds.keys())[0]
-    patchtst_preds = model_preds[target_model_name]  # (N, 3) — columns: 1D, 3D, 7D
+    top3_names = [m for m in ["LSTM", "Transformer", "PatchTST"] if m in model_preds]
+    if not top3_names:
+        return None
 
     # 1. Macro 50-day SMA
     price_series = oos_data['Price']
@@ -357,18 +356,18 @@ def run_hybrid_confluence_simulation(
     week_opens_eval = [week_opens_map.get(dt, anchors[i]) for i, dt in enumerate(eval_dates_dt)]
 
     cash = initial_capital
+    position = 0  # +1 = LONG, -1 = SHORT, 0 = CASH
     btc_held = 0.0
+    short_units = 0.0
+    entry_price = 0.0
+
     equity_curve = []
     buy_hold_curve = []
     trades_executed = 0
     winning_trades = 0
-    in_position = False
-    entry_price = 0.0
 
     risk_on_days = 0
     risk_off_days = 0
-
-    # Per-trade log for transparency
     trade_log = []
 
     for t in range(len(eval_dates)):
@@ -383,76 +382,115 @@ def run_hybrid_confluence_simulation(
         else:
             risk_off_days += 1
 
-        portfolio_val = cash + (btc_held * current_price)
+        # Current Portfolio Valuation
+        if position == 1:
+            portfolio_val = cash + (btc_held * current_price)
+        elif position == -1:
+            portfolio_val = cash + (entry_price - current_price) * short_units
+        else:
+            portfolio_val = cash
+
         equity_curve.append(portfolio_val)
         buy_hold_curve.append(buy_hold_btc * current_price)
 
         if t < lookback:
             continue
 
-        # ── LAYER 1: PatchTST 7D Directional Forecast ──
-        patchtst_7d_log_ret = patchtst_preds[t, 2]
-        predicted_7d_price = current_price * np.exp(patchtst_7d_log_ret)
-        layer1_bullish = predicted_7d_price > current_price
+        # ── 1. Top 3 AI Model Consensus Across 1D, 3D, 7D ──
+        all_preds_t = [model_preds[m][t] for m in top3_names]  # list of [1D, 3D, 7D]
+        avg_pred_1d = np.mean([p[0] for p in all_preds_t])
+        avg_pred_3d = np.mean([p[1] for p in all_preds_t])
+        avg_pred_7d = np.mean([p[2] for p in all_preds_t])
 
-        # ── LAYER 2: Mon/Tue Weekly Open Discount ──
+        models_bullish_all = (avg_pred_1d > 0) and (avg_pred_3d > 0) and (avg_pred_7d > 0)
+        models_bearish_all = (avg_pred_1d < 0) and (avg_pred_3d < 0) and (avg_pred_7d < 0)
+
+        # ── 2. Monday/Tuesday Counter-Trend Market Conditions ──
         is_mon_or_tue = current_dt.dayofweek in [0, 1]
-        below_week_open = current_price < week_open_price
-        layer2_discount = is_mon_or_tue and below_week_open
+        below_week_open = current_price < week_open_price  # Price going down on Mon/Tue (Discount)
+        above_week_open = current_price > week_open_price  # Price going up on Mon/Tue (Premium)
 
-        # ── LAYER 3: 50-Day SMA Macro Overlay ──
-        layer3_macro_ok = is_risk_on
+        # ── 3. Strategy Signal Rules ──
+        buy_trigger = is_mon_or_tue and below_week_open and models_bullish_all
+        sell_trigger = is_mon_or_tue and above_week_open and models_bearish_all
 
-        # ── LAYER 4: Z-Score Mean Reversion ──
-        window_prices = anchors[t - lookback : t]
-        rolling_mean = np.mean(window_prices)
-        rolling_std = np.std(window_prices)
-        z_score = (current_price - rolling_mean) / rolling_std if rolling_std > 1e-8 else 0.0
-        layer4_oversold = z_score < -threshold_z
+        # Sunday Weekly Reset
+        is_sunday = current_dt.dayofweek == 6
 
-        # ── CONFLUENCE VOTE: ≥ 3 of 4 layers must agree ──
-        vote = sum([layer1_bullish, layer2_discount, layer3_macro_ok, layer4_oversold])
-        buy_condition = vote >= 3
-
-        # ── EXIT: PatchTST bearish OR Sunday weekly reset ──
-        sell_condition = patchtst_preds[t, 2] <= 0.0 or current_dt.dayofweek == 6
-
-        # ENTRY
-        if buy_condition and not in_position:
-            allocation_ratio = 1.0 if is_risk_on else risk_off_alloc
-            trade_cash = portfolio_val * allocation_ratio
-            btc_held = trade_cash / current_price
-            cash = portfolio_val - trade_cash
-            entry_price = current_price
-            in_position = True
-            trades_executed += 1
-            trade_log.append({
-                'date': current_dt.strftime('%Y-%m-%d'),
-                'action': 'BUY',
-                'price': current_price,
-                'vote': vote,
-                'layers': f"L1:{'✓' if layer1_bullish else '✗'} L2:{'✓' if layer2_discount else '✗'} L3:{'✓' if layer3_macro_ok else '✗'} L4:{'✓' if layer4_oversold else '✗'}"
-            })
-
-        # EXIT
-        elif sell_condition and in_position:
-            cash = cash + (btc_held * current_price)
-            in_position = False
+        # ── EXITS ──
+        if position == 1 and (sell_trigger or is_sunday or (avg_pred_7d < 0)):
+            # Exit LONG
+            cash = portfolio_val
             is_win = current_price > entry_price
             if is_win:
                 winning_trades += 1
             trade_log.append({
                 'date': current_dt.strftime('%Y-%m-%d'),
-                'action': 'SELL',
-                'price': current_price,
-                'pnl': f"{'WIN' if is_win else 'LOSS'}",
-                'vote': '-',
-                'layers': '-'
+                'type': 'CLOSE LONG',
+                'price': f"${current_price:,.2f}",
+                'result': 'WIN 🟢' if is_win else 'LOSS 🔴',
+                'pnl': f"{((current_price - entry_price) / entry_price * 100):+.2f}%"
             })
+            position = 0
             btc_held = 0.0
 
+        elif position == -1 and (buy_trigger or is_sunday or (avg_pred_7d > 0)):
+            # Exit SHORT
+            cash = portfolio_val
+            is_win = current_price < entry_price
+            if is_win:
+                winning_trades += 1
+            trade_log.append({
+                'date': current_dt.strftime('%Y-%m-%d'),
+                'type': 'CLOSE SHORT',
+                'price': f"${current_price:,.2f}",
+                'result': 'WIN 🟢' if is_win else 'LOSS 🔴',
+                'pnl': f"{((entry_price - current_price) / entry_price * 100):+.2f}%"
+            })
+            position = 0
+            short_units = 0.0
+
+        # ── ENTRIES ──
+        if buy_trigger and position == 0:
+            alloc_ratio = 1.0 if is_risk_on else risk_off_alloc
+            trade_cash = portfolio_val * alloc_ratio
+            btc_held = trade_cash / current_price
+            cash = portfolio_val - trade_cash
+            entry_price = current_price
+            position = 1
+            trades_executed += 1
+            trade_log.append({
+                'date': current_dt.strftime('%Y-%m-%d'),
+                'type': 'BUY (LONG)',
+                'price': f"${current_price:,.2f}",
+                'result': 'OPEN',
+                'pnl': f"Mon/Tue Discount (${current_price:,.2f} < ${week_open_price:,.2f})"
+            })
+
+        elif sell_trigger and position == 0:
+            alloc_ratio = 1.0 if is_risk_on else risk_off_alloc
+            trade_cash = portfolio_val * alloc_ratio
+            short_units = trade_cash / current_price
+            cash = portfolio_val
+            entry_price = current_price
+            position = -1
+            trades_executed += 1
+            trade_log.append({
+                'date': current_dt.strftime('%Y-%m-%d'),
+                'type': 'SELL (SHORT)',
+                'price': f"${current_price:,.2f}",
+                'result': 'OPEN',
+                'pnl': f"Mon/Tue Premium (${current_price:,.2f} > ${week_open_price:,.2f})"
+            })
+
     final_price = actuals[-1]
-    final_portfolio_val = cash + (btc_held * final_price)
+    if position == 1:
+        final_portfolio_val = cash + (btc_held * final_price)
+    elif position == -1:
+        final_portfolio_val = cash + (entry_price - final_price) * short_units
+    else:
+        final_portfolio_val = cash
+
     equity_curve.append(final_portfolio_val)
     buy_hold_curve.append(buy_hold_btc * final_price)
     plot_dates = list(eval_dates) + [eval_dates[-1] + pd.Timedelta(days=1)]
@@ -472,7 +510,7 @@ def run_hybrid_confluence_simulation(
     risk_on_pct = (risk_on_days / total_eval_days * 100) if total_eval_days > 0 else 0.0
     risk_off_pct = (risk_off_days / total_eval_days * 100) if total_eval_days > 0 else 0.0
 
-    # Sharpe Ratio (annualised)
+    # Sharpe Ratio
     daily_returns = np.diff(eq_arr) / eq_arr[:-1]
     sharpe = (np.mean(daily_returns) / (np.std(daily_returns) + 1e-10)) * np.sqrt(365)
 
@@ -493,6 +531,7 @@ def run_hybrid_confluence_simulation(
         'risk_off_pct': risk_off_pct,
         'sharpe': sharpe,
         'trade_log': trade_log,
+        'top3_models': top3_names,
     }
 
 from src.streamlit_utils import render_stakeholder_narrative
@@ -506,12 +545,12 @@ render_stakeholder_narrative(
     title="Trading Bot Simulator",
     simple_explanation="This page translates deep learning prediction accuracy into real-world Business ROI, capital growth, and risk-managed portfolio execution.",
     connection_story="Connects model predictions (Pages 3, 7, 8) and statistical hypothesis tests (Page 11) to simulate algorithmic execution on live out-of-sample market data.",
-    key_takeaway="The CryptoCast Confluence Strategy combines 4 signal layers — PatchTST 7D direction, weekly discount entry, macro SMA overlay, and Z-score mean reversion — into a single risk-managed system."
+    key_takeaway="Combines Top 3 AI Model multi-horizon predictions (1D/3D/7D) with Monday/Tuesday counter-trend entries (buying discounts below weekly open, selling premiums above weekly open)."
 )
 
 st.markdown('<div class="cc-eyebrow">Financial Impact</div>', unsafe_allow_html=True)
 st.markdown('<div class="cc-title">Trading Bot Simulator 💸</div>', unsafe_allow_html=True)
-st.markdown('<div class="cc-subtitle">Unified 4-Layer Confluence Strategy — combining the best signals into one risk-managed trading system.</div>', unsafe_allow_html=True)
+st.markdown('<div class="cc-subtitle">Dual-Directional (BUY & SELL) AI Strategy — Top 3 Models (1D/3D/7D) + Monday/Tuesday Weekly Open Counter-Trend Signals.</div>', unsafe_allow_html=True)
 
 if not os.path.exists(DATA_PATH) or not os.path.exists(SCALER_PATH):
     st.error("Training data or scaler not found. Ensure previous steps are complete.")
@@ -523,28 +562,25 @@ last_train_date = pd.to_datetime(train_df['Date'].max())
 # ── Strategy Architecture Explanation ──────────────────────────────────────────
 st.markdown("""
 <div style="background: linear-gradient(135deg, rgba(13,17,23,0.9), rgba(30,41,59,0.9)); border:1px solid #30363d; border-radius:12px; padding:20px; margin-bottom:20px;">
-    <h4 style="color:#38bdf8; margin-bottom:12px;">🧬 CryptoCast Confluence Strategy Architecture</h4>
+    <h4 style="color:#38bdf8; margin-bottom:12px;">🧬 Dual-Directional (BUY & SELL) Strategy Architecture</h4>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
         <div style="background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.3); border-radius:8px; padding:12px;">
-            <span style="color:#22c55e; font-weight:700;">Layer 1 — PatchTST 7D Forecast</span>
-            <p style="color:#94a3b8; font-size:12px; margin:4px 0 0;">Champion model predicts 7-day price direction. Entry requires bullish forecast (P̂₇D > P_current).</p>
+            <span style="color:#22c55e; font-weight:700;">🟢 BUY ENTRY (LONG)</span>
+            <p style="color:#94a3b8; font-size:12px; margin:4px 0 0;">
+                <b>Model Signal:</b> Top 3 models (LSTM, Transformer, PatchTST) ALL predict higher prices across 1D, 3D, and 7D.<br>
+                <b>Market Trigger:</b> On Mon/Tue, price is moving down <i>below weekly open</i> (discount entry).
+            </p>
         </div>
-        <div style="background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.3); border-radius:8px; padding:12px;">
-            <span style="color:#3b82f6; font-weight:700;">Layer 2 — Mon/Tue Discount Entry</span>
-            <p style="color:#94a3b8; font-size:12px; margin:4px 0 0;">Turn-of-the-Month (TOM) seasonality. Enter only Mon/Tue when price trades below weekly open.</p>
-        </div>
-        <div style="background:rgba(249,115,22,0.1); border:1px solid rgba(249,115,22,0.3); border-radius:8px; padding:12px;">
-            <span style="color:#f97316; font-weight:700;">Layer 3 — 50-Day SMA Overlay</span>
-            <p style="color:#94a3b8; font-size:12px; margin:4px 0 0;">Macro crash protection. Full allocation when Price ≥ SMA (Risk-On), reduced when below (Risk-Off).</p>
-        </div>
-        <div style="background:rgba(168,85,247,0.1); border:1px solid rgba(168,85,247,0.3); border-radius:8px; padding:12px;">
-            <span style="color:#a855f7; font-weight:700;">Layer 4 — Z-Score Mean Reversion</span>
-            <p style="color:#94a3b8; font-size:12px; margin:4px 0 0;">Statistical oversold filter. Confirms entry when price is Z < -σ below rolling mean (bottom-fishing).</p>
+        <div style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:8px; padding:12px;">
+            <span style="color:#ef4444; font-weight:700;">🔴 SELL ENTRY (SHORT)</span>
+            <p style="color:#94a3b8; font-size:12px; margin:4px 0 0;">
+                <b>Model Signal:</b> Top 3 models ALL predict lower prices across 1D, 3D, and 7D.<br>
+                <b>Market Trigger:</b> On Mon/Tue, price is moving up <i>above weekly open</i> (premium exit/short).
+            </p>
         </div>
     </div>
     <p style="color:#e2e8f0; font-size:13px; margin-top:14px; text-align:center; font-weight:600;">
-        📊 Confluence Vote: Entry requires <span style="color:#4ade80;">≥ 3 of 4 layers</span> to agree &nbsp;|&nbsp;
-        Exit: PatchTST turns bearish OR Sunday weekly reset
+        🛡️ Macro 50-Day SMA Risk Overlay: Full capital allocation in Risk-On (Price ≥ SMA), reduced in Risk-Off (Price < SMA)
     </p>
 </div>
 """, unsafe_allow_html=True)
