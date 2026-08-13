@@ -156,9 +156,17 @@ def run_forward_test(model_name, model_class, oos_data, scaler, seq_length=60):
     
     return pred_prices, actuals, eval_dates
 
-# ==============================================================================
-# Streamlit UI
-# ==============================================================================
+from src.streamlit_utils import render_stakeholder_narrative
+
+render_stakeholder_narrative(
+    page_num=11,
+    total_pages=11,
+    title="True Out-Of-Sample (OOS) Forward Testing",
+    simple_explanation="This page evaluates model forecasts on live market data that occurred AFTER the training cut-off date (March 2024 to present).",
+    connection_story="Provides the ultimate empirical validation of model performance and trading bot ROI (Page 10) on completely unseen data.",
+    key_takeaway="True OOS testing verifies that the PatchTST model retains its low MAE and directional accuracy beyond the historical training partition."
+)
+
 st.markdown('<div class="cc-eyebrow">Evaluation</div>', unsafe_allow_html=True)
 st.markdown('<div class="cc-title">True OOS Forward Testing ⏱️</div>', unsafe_allow_html=True)
 st.markdown('<div class="cc-subtitle">Evaluate models on completely unseen market data from March 2024 to present.</div>', unsafe_allow_html=True)

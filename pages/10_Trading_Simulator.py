@@ -446,7 +446,7 @@ render_stakeholder_narrative(
     total_pages=11,
     title="Trading Bot Simulator",
     simple_explanation="This page translates deep learning prediction accuracy into real-world Business ROI, capital growth, and risk-managed portfolio execution.",
-    connection_story="Connects model predictions (Pages 3, 7, 8) and statistical hypothesis tests (Page 11) to simulate algorithmic execution on live out-of-sample market data.",
+    connection_story="Connects real-time live predictions (Page 8) and statistical hypothesis tests (Page 9) to simulate algorithmic execution on live out-of-sample market data before forward testing (Page 11).",
     key_takeaway="Combines Top 3 AI Model multi-horizon predictions (1D/3D/7D) with Monday/Tuesday counter-trend entries (buying discounts below weekly open, selling premiums above weekly open)."
 )
 

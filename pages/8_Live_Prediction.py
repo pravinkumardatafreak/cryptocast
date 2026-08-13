@@ -163,11 +163,11 @@ from src.streamlit_utils import render_stakeholder_narrative
 # Streamlit UI
 # ==============================================================================
 render_stakeholder_narrative(
-    page_num=7,
+    page_num=8,
     total_pages=11,
     title="Real-Time Live Model Prediction",
     simple_explanation="This page streams real-time live Bitcoin data from Yahoo Finance and executes PyTorch neural network forward passes for 1D, 3D, and 7D price forecasts.",
-    connection_story="Applies trained PyTorch model weights (Page 3) to live streaming data, producing current target forecasts that feed directly into Page 10 (Trading Simulator).",
+    connection_story="Applies trained PyTorch model weights (Pages 3-5) and SHAP feature insights (Page 7) to live market data, feeding forecasts into Statistical Hypothesis Testing (Page 9) and Trading Simulator (Page 10).",
     key_takeaway="Live 60-day feature sequences are scaled and inferred instantly, allowing real-time execution of the PatchTST 7D Bullish strategy."
 )
 

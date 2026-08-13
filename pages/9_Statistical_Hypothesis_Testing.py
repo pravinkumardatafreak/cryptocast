@@ -26,12 +26,12 @@ RESULTS_DIR = os.path.join(PROJECT_DIR, "results")
 # Header
 # ==============================================================================
 render_stakeholder_narrative(
-    page_num=11,
+    page_num=9,
     total_pages=11,
     title="Statistical Hypothesis Testing Studio",
-    simple_explanation="This page proves mathematically that our PatchTST AI model signal generates genuine trading edge, eliminating random luck.",
-    connection_story="Validates the trading rules implemented in Page 10 (Trading Simulator) using formal inferential statistics (Welch's t-Test & Chi-Square alignment across N=5,813 samples till today).",
-    key_takeaway="Blind dip-buying fails H0 (p=0.765), but filtering entries with PatchTST 7D predictions flips the t-stat to +1.4771 (92.8% confidence), proving the AI engine generates alpha."
+    simple_explanation="This page proves mathematically that our Top 3 AI model consensus signal generates genuine trading edge, eliminating random luck.",
+    connection_story="Statistically evaluates the dual-directional AI signals before executing real-world portfolio backtesting in Page 10 (Trading Simulator).",
+    key_takeaway="Blind dip-buying fails H0 (p=0.765), but filtering entries with AI 1D/3D/7D consensus flips the t-stat to +1.4771 (92.8% confidence), proving the AI engine generates alpha."
 )
 
 st.markdown('<div class="cc-eyebrow">Inferential Statistics & Validation</div>', unsafe_allow_html=True)

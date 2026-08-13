@@ -14,33 +14,15 @@ try:
 except ImportError:
     SHAP_AVAILABLE = False
 
-st.set_page_config(
-    page_title="CryptoCast | Explainable AI (SHAP)",
-    page_icon="🔮",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+from src.streamlit_utils import render_stakeholder_narrative
 
-# Custom CSS for UI
-st.markdown("""
-<style>
-    .cc-title { font-size: 2rem; font-weight: 700; color: #e6edf3; margin-bottom: 0.2rem; }
-    .cc-subtitle { font-size: 1.1rem; color: #8b949e; margin-bottom: 2rem; }
-    .cc-section-title { font-size: 1.3rem; font-weight: 600; color: #e6edf3; margin-top: 2rem; margin-bottom: 1rem; border-bottom: 1px solid #30363d; padding-bottom: 0.5rem; }
-    .cc-eyebrow { font-size: 0.85rem; font-weight: 600; color: #38bdf8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: -15px;}
-</style>
-""", unsafe_allow_html=True)
-
-PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODELS_DIR = os.path.join(PROJECT_DIR, 'models')
-DATA_PATH = os.path.join(PROJECT_DIR, 'data', 'btc_data.csv')
-SCALER_PATH = os.path.join(PROJECT_DIR, 'scalers.pkl')
-
-DARK_LAYOUT = dict(
-    template='plotly_dark',
-    plot_bgcolor='rgba(0,0,0,0)',
-    paper_bgcolor='rgba(0,0,0,0)',
-    margin=dict(l=40, r=40, t=40, b=40)
+render_stakeholder_narrative(
+    page_num=7,
+    total_pages=11,
+    title="Explainable AI (SHAP)",
+    simple_explanation="This page unpacks the black-box PyTorch models using SHAP (SHapley Additive exPlanations) to prove feature attributions across 1D, 3D, and 7D horizons.",
+    connection_story="Connects PyTorch model outputs (Pages 3-5) and macro risk overlays (Page 6) to explain feature drivers before real-time inference (Page 8).",
+    key_takeaway="SHAP analysis confirms that whitepaper protocol features (Block Reward, Halving Progress) drive long-term 7D structural forecasts, while short-term 1D forecasts rely on price momentum."
 )
 
 # Import model architectures from centralized src.models module
