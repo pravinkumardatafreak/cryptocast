@@ -341,8 +341,7 @@ else:
                 title="Live Multi-Horizon Price Projection Trajectory",
                 height=360,
                 xaxis_title="Date",
-                yaxis_title="Price (USD)",
-                yaxis=dict(tickformat="$,"),
+                yaxis=dict(title="Price (USD)", tickformat="$,"),
                 showlegend=True,
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
             )
