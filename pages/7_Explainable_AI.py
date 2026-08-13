@@ -25,6 +25,19 @@ render_stakeholder_narrative(
     key_takeaway="SHAP analysis confirms that whitepaper protocol features (Block Reward, Halving Progress) drive long-term 7D structural forecasts, while short-term 1D forecasts rely on price momentum."
 )
 
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODELS_DIR = os.path.join(PROJECT_DIR, 'models')
+DATA_PATH = os.path.join(PROJECT_DIR, 'data', 'btc_data.csv')
+SCALER_PATH = os.path.join(PROJECT_DIR, 'scalers.pkl')
+RESULTS_DIR = os.path.join(PROJECT_DIR, 'results')
+
+DARK_LAYOUT = dict(
+    template='plotly_dark',
+    plot_bgcolor='rgba(0,0,0,0)',
+    paper_bgcolor='rgba(0,0,0,0)',
+    margin=dict(l=40, r=40, t=40, b=40)
+)
+
 # Import model architectures from centralized src.models module
 from src.models import CNN1D, RNNModel, LSTMModel, TransformerModel, RevIN, PatchTSTModel
 
