@@ -83,8 +83,9 @@ with tab1:
                    "Trading Dual-Directional (BUY & SELL) entries when Top 3 AI Models (LSTM, Transformer, PatchTST) agree on 1D/3D/7D direction and Mon/Tue price moves counter-trend yields STATISTICALLY SIGNIFICANT excess alpha ($p < 0.05$).")
 
     st.markdown("---")
-    st.markdown('<div class="cc-section-title">Empirical Test Execution & Comparisons</div>', unsafe_allow_html=True)
-    
+    import importlib
+    import src.hypothesis_strategy
+    importlib.reload(src.hypothesis_strategy)
     from src.hypothesis_strategy import run_weekly_hypothesis_test, run_ai_dual_directional_hypothesis_test
     
     # 1. Experiment 1: Unfiltered Technical Rule (No AI)
