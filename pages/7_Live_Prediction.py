@@ -183,9 +183,26 @@ def get_halving_features(dates):
 
 def fetch_live_data():
     """Fetch recent data from yfinance and apply exact EDA preprocessing."""
+    import time
     ticker = yf.Ticker("BTC-USD")
-    # Fetch enough data to compute 60-day sequence + extra for pct_change
-    df = ticker.history(period="100d")
+    # Retry up to 3 times with increasing delay (Yahoo Finance API can be flaky)
+    df = None
+    for attempt in range(1, 4):
+        try:
+            df = ticker.history(period="100d")
+            if df is not None and not df.empty:
+                break
+        except Exception:
+            pass
+        time.sleep(attempt * 2)  # 2s, 4s, 6s backoff
+    
+    if df is None or df.empty:
+        st.error(
+            "⚠️ Yahoo Finance API is temporarily unavailable. "
+            "This can happen due to rate limiting or network issues. "
+            "Please wait 30 seconds and click **Re-run** to retry."
+        )
+        st.stop()
     
     # OPTION A: Drop the current incomplete day to prevent distribution shift
     df = df.iloc[:-1]
