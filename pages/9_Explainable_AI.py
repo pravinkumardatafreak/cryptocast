@@ -244,16 +244,33 @@ def compute_shap_values(_model, _X_t, model_name):
         explainer = shap.GradientExplainer(_model, background)
         shap_vals = explainer.shap_values(test_sample)
     
-    # shap_vals is a list of 3 arrays (one per output neuron: 1D, 3D, 7D)
-    # Each array has shape (n_samples, seq_len, n_features)
     results = {}
     horizon_names = ['1D', '3D', '7D']
+    
+    def extract_horizon_score(shap_raw, h_idx):
+        if isinstance(shap_raw, list):
+            arr = shap_raw[h_idx] if h_idx < len(shap_raw) else shap_raw[0]
+            if arr.ndim == 3:
+                return np.abs(arr).mean(axis=(0, 1))
+            elif arr.ndim == 2:
+                return np.abs(arr).mean(axis=0)
+        elif isinstance(shap_raw, np.ndarray):
+            if shap_raw.ndim == 4:
+                if shap_raw.shape[-1] == 3:  # (n_samples, seq_len, n_features, 3)
+                    arr = shap_raw[..., h_idx]
+                    return np.abs(arr).mean(axis=(0, 1))
+                elif shap_raw.shape[0] == 3:  # (3, n_samples, seq_len, n_features)
+                    arr = shap_raw[h_idx]
+                    return np.abs(arr).mean(axis=(0, 1))
+            elif shap_raw.ndim == 3:  # (n_samples, seq_len, n_features)
+                return np.abs(shap_raw).mean(axis=(0, 1))
+        
+        arr = np.array(shap_raw)
+        return np.abs(arr).reshape(-1, 16).mean(axis=0)
+
     for i, h_name in enumerate(horizon_names):
-        if i < len(shap_vals):
-            # Aggregate: mean absolute SHAP across samples and sequence positions
-            results[h_name] = np.abs(shap_vals[i]).mean(axis=1).mean(axis=0)
-        else:
-            results[h_name] = np.abs(shap_vals[0]).mean(axis=1).mean(axis=0)
+        results[h_name] = extract_horizon_score(shap_vals, i)
+        
     return results
 
 # Feature category mapping for grouped analysis
