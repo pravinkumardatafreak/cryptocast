@@ -541,46 +541,42 @@ if 'sim_results' in st.session_state and st.session_state['sim_results'] is not 
     results = st.session_state['sim_results']
 
     st.markdown(
-        '<div class="cc-section-title">CryptoCast Confluence Strategy — Out-Of-Sample Results</div>',
+        '<div class="cc-section-title">Step 3 — Performance & Alpha Scorecard (Out-Of-Sample Data)</div>',
         unsafe_allow_html=True,
     )
 
     ai_roi = ((results['final_val'] - 10000) / 10000) * 100
     bh_roi = ((results['buy_hold_val'] - 10000) / 10000) * 100
+    alpha = ai_roi - bh_roi
 
     ai_color = "negative" if ai_roi < 0 else ""
+    alpha_color = "#4ade80" if alpha > 0 else "#f87171"
     sharpe_color = "negative" if results.get('sharpe', 0) < 0 else ""
 
-    # ── 6-Column Metric Dashboard ──────────────────────────────────────────────
+    # ── Unified 6-Card Performance Scorecard (No Duplicate Flash Cards) ───────
     m1, m2, m3, m4, m5, m6 = st.columns(6)
     m1.markdown(f'<div class="metric-card"><div class="metric-value {ai_color}">${results["final_val"]:,.0f}</div><div class="metric-label">Strategy Value</div></div>', unsafe_allow_html=True)
     m2.markdown(f'<div class="metric-card"><div class="metric-value {ai_color}">{ai_roi:+.2f}%</div><div class="metric-label">Strategy ROI</div></div>', unsafe_allow_html=True)
-    m3.markdown(f'<div class="metric-card"><div class="metric-value">{results["trades_executed"]}</div><div class="metric-label">Total Trades</div></div>', unsafe_allow_html=True)
-    m4.markdown(f'<div class="metric-card"><div class="metric-value">{results["win_rate"]:.1f}%</div><div class="metric-label">Win Rate</div></div>', unsafe_allow_html=True)
+    m3.markdown(f'<div class="metric-card"><div class="metric-value" style="color:{alpha_color};">{alpha:+.2f}%</div><div class="metric-label">Alpha vs Benchmark</div></div>', unsafe_allow_html=True)
+    m4.markdown(f'<div class="metric-card"><div class="metric-value">{results["win_rate"]:.1f}%</div><div class="metric-label">Signal Win Rate</div></div>', unsafe_allow_html=True)
     m5.markdown(f'<div class="metric-card"><div class="metric-value">{results.get("max_strat_dd", 0.0):.1f}%</div><div class="metric-label">Max Drawdown</div></div>', unsafe_allow_html=True)
     m6.markdown(f'<div class="metric-card"><div class="metric-value {sharpe_color}">{results.get("sharpe", 0.0):.2f}</div><div class="metric-label">Sharpe Ratio</div></div>', unsafe_allow_html=True)
 
-    # ── Benchmark Comparison Row ───────────────────────────────────────────────
-    bh_color = "negative" if bh_roi < 0 else ""
-    b1, b2, b3 = st.columns([1, 1, 2])
-    b1.markdown(f'<div class="metric-card"><div class="metric-value" style="color:#94a3b8;">${results["buy_hold_val"]:,.0f}</div><div class="metric-label">Buy & Hold Value</div></div>', unsafe_allow_html=True)
-    b2.markdown(f'<div class="metric-card"><div class="metric-value" style="color:#94a3b8;">{bh_roi:+.2f}%</div><div class="metric-label">Buy & Hold ROI</div></div>', unsafe_allow_html=True)
-    alpha = ai_roi - bh_roi
-    alpha_color = "#4ade80" if alpha > 0 else "#f87171"
-    b3.markdown(f'<div class="metric-card"><div class="metric-value" style="color:{alpha_color};">{alpha:+.2f}%</div><div class="metric-label">Alpha Generated vs Benchmark</div></div>', unsafe_allow_html=True)
-
-    if 'risk_on_pct' in results:
-        st.markdown(
-            f'<div style="background:#0d1117; border:1px solid #30363d; border-radius:8px; '
-            f'padding:12px 16px; margin-top:16px; margin-bottom:8px; font-size:13px; color:#c9d1d9;">'
-            f'🌐 <b>Macro Liquidity Regime</b>: '
-            f'<span style="color:#4ade80; font-weight:700;">Risk-On</span>: {results["risk_on_pct"]:.1f}% of period | '
-            f'<span style="color:#fb923c; font-weight:700;">Risk-Off</span>: {results["risk_off_pct"]:.1f}% of period'
-            f'</div>',
-            unsafe_allow_html=True,
+    if alpha > 0:
+        st.success(
+            f"🟢 **Alpha Generated!** Strategy ROI (**{ai_roi:+.2f}%**) outperformed "
+            f"Bitcoin Buy & Hold Benchmark (**{bh_roi:+.2f}%**) by **{alpha:+.2f}%**."
+        )
+    else:
+        st.warning(
+            f"🟡 **Benchmark Comparison**: Strategy ROI is **{ai_roi:+.2f}%** vs Buy & Hold **{bh_roi:+.2f}%** ({alpha:+.2f}% alpha). "
+            f"During strong bull runs, Buy & Hold captures full upside, while the AI strategy protects capital against major drawdowns "
+            f"({results.get('max_strat_dd', 0.0):.1f}% Max DD vs {results.get('max_bh_dd', 0.0):.1f}% Benchmark DD)."
         )
 
-    # ── Interactive Subplot: Equity Curve + Drawdown Fill ──────────────────────
+    # ── Step 4: Interactive Equity Growth & Drawdown Subplot ───────────────────
+    st.markdown('<div class="cc-section-title">Step 4 — Portfolio Equity Growth & Drawdown Curve</div>', unsafe_allow_html=True)
+
     from plotly.subplots import make_subplots
 
     fig = make_subplots(
@@ -630,8 +626,8 @@ if 'sim_results' in st.session_state and st.session_state['sim_results'] is not 
         template='plotly_dark',
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
-        height=520,
-        margin=dict(l=40, r=40, t=50, b=40),
+        height=500,
+        margin=dict(l=40, r=40, t=40, b=40),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
     fig.update_yaxes(title_text="Value (USD)", tickformat="$,", row=1, col=1)
@@ -639,7 +635,9 @@ if 'sim_results' in st.session_state and st.session_state['sim_results'] is not 
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # ── Visual Row 2: Win-Rate Donut Chart & Risk Regime Pie ──────────────────
+    # ── Step 5: Visual Distributions ──────────────────────────────────────────
+    st.markdown('<div class="cc-section-title">Step 5 — Strategy Performance Breakdown</div>', unsafe_allow_html=True)
+
     c_pie1, c_pie2 = st.columns(2)
 
     with c_pie1:
