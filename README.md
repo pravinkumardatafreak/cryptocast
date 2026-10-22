@@ -264,6 +264,32 @@ Every 210,000 blocks (~4 years), block rewards halve — creating a supply-side 
 
 Reference: [Bitcoin Whitepaper — Satoshi Nakamoto](https://bitcoin.org/bitcoin.pdf)
 
+## Future Directions & High-Impact Roadmap
+
+To elevate CryptoCast from an academic research benchmark into an institutional-grade quantitative trading and execution platform, the following high-impact initiatives are roadmap milestones:
+
+### 1. Epistemic Uncertainty Estimation via Monte Carlo Dropout
+* **Objective:** Move beyond single point forecasts by quantifying predictive uncertainty in volatile market regimes.
+* **Mechanism:** Execute $N=50$ stochastic forward passes with dropout active (`model.train()`) during live inference in `pages/8_Live_Prediction.py`.
+* **Impact:** Generates a real-time **95% Confidence Interval band** ($P_t \pm 1.96 \cdot \sigma_{\text{MC}}$). Alerts automated trading systems when model epistemic uncertainty spikes, preventing trade execution during abnormal volatility shocks.
+
+### 2. Fractional Kelly Criterion Position Sizing
+* **Objective:** Dynamically optimize position sizing based on historical empirical edge rather than fixed capital allocations.
+* **Mechanism:** Integrate the fractional Kelly Criterion into the execution logic of `pages/10_Trading_Simulator.py`:
+  $$f^* = \lambda \cdot \frac{p \cdot b - q}{b}$$
+  where $p$ is the model's directional win rate, $q = 1 - p$, $b$ is the win/loss payout ratio, and $\lambda \in [0.25, 0.5]$ is the fractional Kelly safety scalar.
+* **Impact:** Mathematically maximizes long-term geometric equity growth while strictly protecting against drawdown and ruin during prolonged drawdowns.
+
+### 3. Dual-Horizon Ensembling (Meta-Stacking)
+* **Objective:** Exploit complementary inductive biases across distinct neural architectures.
+* **Mechanism:** Train an L2-regularized Ridge / LightGBM meta-learner blending the localized high-frequency feature extraction of `1D-CNN` (strongest on 1D momentum) with the global patch-level self-attention of `PatchTST` (leading on 3D and 7D horizons).
+* **Impact:** Lowers overall test variance and improves directional prediction stability across turbulent market regimes.
+
+### 4. Automated Live Webhook Signal Dispatcher
+* **Objective:** Enable continuous event-driven forward testing and live market alerts.
+* **Mechanism:** Implement async webhook dispatchers (Discord / Telegram / REST API) triggering real-time alerts whenever multi-horizon directional consensus between PatchTST and the statistical hypothesis engine exceeds an $80\%$ confidence threshold.
+* **Impact:** Bridges backtested quantitative models with live paper-trading execution.
+
 ## Tech Stack
 
 - **PyTorch** — Deep learning framework
